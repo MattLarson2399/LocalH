@@ -3433,14 +3433,51 @@ sub AoAUnion{
 
 }
 
+#usage:generateABunchOfDiagrams(dimension, number of iterations)
+#returns a bunch of reduced that give triangulations
+#may return fewer diagrams because the random diagrams it generates might be non-simplicial
+sub generateABunchOfDiagrams{
+	my $dim = shift;
+	my $iter = shift;
+	my @diagrams = ();
+	for my $i (0..$iter){
+		my $diagram = sumRND($dim, 10000, 20, 50);
+		my $subdiv = diagramToSubdiv($diagram);
+		if ($subdiv == 1){
+			next;
+		}
+		$diagram = removeRedundant($diagram, $subdiv);
+		push(@diagrams, $diagram);
+	}
+	return \@diagrams;
+}
+
+#usage:returnB1Facets($diagram, $subdiv)
+#diagram should be reduced
+#returns an AoA of all B1 facets
+sub returnB1Facets{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my $nfacets = $subdiv->N_FACETS;
+	my @B1s = ();
+	for my $i (0..$nfacets - 1){
+		my @facet = @{$subdiv->FACETS->[$i]};
+		if (isLatticePyramid($diagram, \@facet)){
+			push(@B1s, \@facet);
+		}
+	}
+	return \@B1s;
+}
+
 
 #usage: lookForCD2(diagram)
 #diagram should be reduced, give a triangulation
-#Finds all faces that are contained in a non-pyrmidal facet and are also Q for a B_1 facets
+#Finds all faces that are contained in a non-pyrmidal facet and are also Q for a B_1 facets and have carrier codim 2
 #returns 1 if there is such a face, returns 0 if there isn't
 sub lookForCD2{
 	my $diagram = shift;
 	my $subdiv = diagramToSubdiv($diagram);
+	my $dim = $subdiv->DIM;
 	my @npyramidal = @{returnNonPyramidalFaces($subdiv)};
 	my @smallcodim;
 	my @candidates;
@@ -3449,7 +3486,27 @@ sub lookForCD2{
 		#pArrArr(\@tocheck);
 		@candidates = @{AoAUnion(\@tocheck, \@candidates)};
 	}
-	#working correctly up to here
+	#check which of the faces has carrier codimension 2
+	for my $face (@candidates){
+		if (scalar(@{carrier($subdiv, $face)}) == 2){
+			push(@smallcodim, $face);
+		}
+	}
+
+	#find all B_1 facets, find Q for each
+	#check if any of these faces is Q of a B_1 facet
+
+	my @B1s = @{returnB1Facets($diagram, $subdiv)};
+	for my $facet (@B1s){
+		my $Q = returnQ($diagram, $subdiv, $facet);
+		for my $face (@smallcodim){
+			if (entrywiseEquality($Q, $face) == 1){
+				pArr($face);
+				pArr($facet);
+				return 1;
+			}
+		}
+	}
 
 
 
