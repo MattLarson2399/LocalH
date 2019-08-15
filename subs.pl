@@ -781,7 +781,7 @@ sub isUnimodal{
 
 
 #usage: returnNonPyramidalFaces($subiv)
-#returns an arref containing all non-pyramidal faces
+#returns an arref containing all non-pyramidal facets
 sub returnNonPyramidalFaces{
 	my $subdiv = shift;
 	my @flist = ();
@@ -3414,8 +3414,49 @@ sub writeRandomTriangulation{
 	}
 
 }
+#usage: AoAUnion($Aoa, $AoA)
+#returns the union of the two arrays, where if two arrays in the AoA are entrwise equal then they are viewed as the same
+#returns an AoA
+sub AoAUnion{
+    my ($a1, $a2) = @_;
+    my %uniq;
+
+    $uniq{"@$_"} = 1 for @$a1;
+
+    for ( @$a2 ) {
+        my $key = "@$_";
+        next if $uniq{$key}++;
+        push @$a1, [ @$_ ];
+    }
+
+    return $a1;
+
+}
 
 
+#usage: lookForCD2(diagram)
+#diagram should be reduced, give a triangulation
+#Finds all faces that are contained in a non-pyrmidal facet and are also Q for a B_1 facets
+#returns 1 if there is such a face, returns 0 if there isn't
+sub lookForCD2{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @npyramidal = @{returnNonPyramidalFaces($subdiv)};
+	my @smallcodim;
+	my @candidates;
+	for my $facet (@npyramidal){
+		my @tocheck = subarrs(@{$facet});
+		#pArrArr(\@tocheck);
+		@candidates = @{AoAUnion(\@tocheck, \@candidates)};
+	}
+	#working correctly up to here
+
+
+
+
+
+	return 0;
+}
 
 
 
