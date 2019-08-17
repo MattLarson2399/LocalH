@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Jason Schuchardt and Matt Larson
-#Last updated: 07/17/2018
+#Last updated: 08/17/2019
 
 #contains various useful scripts
 #does not have specific things designed to test specific conjectures
