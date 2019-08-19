@@ -3503,6 +3503,7 @@ sub lookForCD2{
 			if (entrywiseEquality($Q, $face) == 1){
 				pArr($face);
 				pArr($facet);
+				pArr(relativeLocalH($subdiv, $face));
 				return 1;
 			}
 		}
