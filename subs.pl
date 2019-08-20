@@ -3472,7 +3472,7 @@ sub returnB1Facets{
 
 #usage: lookForCD2(diagram)
 #diagram should be reduced, give a triangulation
-#Finds all faces that are contained in a non-pyrmidal facet and are also Q for a B_1 facets and have carrier codim 2
+#Finds all faces that are contained in a non-pyrmidal facet and are also Q for a B_1 facets and have carrier codim 2, excess at least 2
 #returns 1 if there is such a face, returns 0 if there isn't
 sub lookForCD2{
 	my $diagram = shift;
@@ -3488,7 +3488,7 @@ sub lookForCD2{
 	}
 	#check which of the faces has carrier codimension 2
 	for my $face (@candidates){
-		if (scalar(@{carrier($subdiv, $face)}) == 2){
+		if ((scalar(@{carrier($subdiv, $face)}) == 2)and (excess($subdiv, $face) > 1)){
 			push(@smallcodim, $face);
 		}
 	}
@@ -3503,18 +3503,114 @@ sub lookForCD2{
 			if (entrywiseEquality($Q, $face) == 1){
 				pArr($face);
 				pArr($facet);
+				pArrArr($diagram);
 				pArr(relativeLocalH($subdiv, $face));
 				return 1;
 			}
 		}
 	}
 
-
-
-
-
 	return 0;
 }
+
+
+
+
+#usage: NonSimpRemoveRedundant(diagram)
+#takes a diagram, removes the points that don't contribute to the subdivision
+#works without assuming that the subdiision is simplicial
+#returns the reduced diagram
+sub nonSimpRemoveRedundant{
+	my $diagram = shift;
+	my $subdiv = nonSimpDiagramToSubdiv($diagram); 
+	my @good = @{$subdiv->VERTEX_INDICES};
+	my @relevant_faces = ();
+	for my $index (@good){
+		push(@relevant_faces, $diagram->[$index]);
+	}
+
+	return \@relevant_faces;
+}
+
+#usage: perturbNonSimp(diagram)
+#diagram should be reduced
+#adds a small random number to vertex other than the vertices that make it convenient
+#this can be used to compute a random triangulation
+sub perturbNonSimp{
+	my $diagram = shift;
+	my @newdiagram;
+	my $dim = scalar(@{$diagram->[0]});
+	for my $vertex (@{$diagram}){
+		#counts number of entries that are non-zero
+		my $numnon0 = 0;
+		my @newvert;
+		for my $index (0..($dim - 1)){
+			if ($vertex->[$index] == 0){
+				$numnon0 += 1;
+			}
+		}
+		if ($numnon0 == $dim - 1){
+			push(@newdiagram, $vertex);
+			next;
+		}
+		for my $index (0..($dim - 1)){
+			push(@newvert, $vertex->[$index] + rand()/1000);
+		}
+		push(@newdiagram, \@newvert);
+
+	}
+	return \@newdiagram;
+
+}
+
+
+#usage:findTriangulated($diagram, $triangulateddiagram, $facet)
+#$facet should be a (non-simplicial) facet of the original diagram
+# this non-simplicial facet is randomly triangulated by $triangulateddiagram
+#this returns an AoA giving the trinagulating facets
+sub findTriangulated{
+	my $diagram = shift;
+	my $triangulateddiagram = shift;
+	my $facet = shift;
+	my $subdiv = diagramToSubdiv($triangulateddiagram);
+	my @faces;
+	my $dim = scalar(@{$triangulateddiagram->[0]});
+	my @candidates = subsets($facet, $dim);
+	for my $candidate (@candidates){
+		if (isFace($subdiv, $candidate)){
+			push(@faces, $candidate);
+		}
+	}
+	return \@faces;
+}
+
+#usage: computeMultiplicity($diagram, $facet)
+#not necessary unless the facet is non-simplicial
+#computes the contribution to the multiplicity of the corresponding eigenvalue
+sub computeMultiplicity{
+	my $diagram = shift;
+	my $facet = shift;
+	my $reduceddiagram = nonSimpRemoveRedundant($diagram);
+	my $perturbed = perturbNonSimp($reduceddiagram);
+	my $subdiv = diagramToSubdiv($perturbed);
+	my $contributingfacets = findTriangulated($reduceddiagram, $perturbed, $facet);
+	my $mult = 0;
+	for my $face (@{$contributingfacets}){
+		pArr($face);
+		#uses 3 because the 2nd argument of returnQ isn't necessary, and I'm too lazy to fix it
+		my $Q = returnQ($reduceddiagram, 3, $face);
+		my $local_h = relativeLocalH($subdiv, $Q);
+		$mult += sumArray($local_h);
+	}
+	return $mult;
+}
+
+
+
+
+
+
+
 
 
 
