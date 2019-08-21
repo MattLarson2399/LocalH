@@ -3554,7 +3554,7 @@ sub perturbNonSimp{
 			next;
 		}
 		for my $index (0..($dim - 1)){
-			push(@newvert, $vertex->[$index] + rand()/1000);
+			push(@newvert, $vertex->[$index] + rand()/1000000);
 		}
 		push(@newdiagram, \@newvert);
 
@@ -3562,6 +3562,40 @@ sub perturbNonSimp{
 	return \@newdiagram;
 
 }
+
+
+#usage: checkGoodTri($diagram, perturbed diagram)
+#bad things that can when happen when perturbing: one of the facets might not be affine independent
+#or we could lose a vertex
+#checks for both
+#returns 0 if it is not good, 1 if it is goods
+sub checkIfGoodTri{
+	my $diagram = shift;
+	my $perturbed = shift;
+	my $dim = scalar(@{$perturbed->[0]});
+	my $subdiv = diagramToSubdiv($perturbed);
+	my $numverts = scalar(@{$diagram});
+	if (($subdiv->N_VERTICES) != $numverts){
+		return 0;
+	}
+	my @flist = @{$subdiv->FACETS};
+	for my $facettemp (@flist){
+		my @facet = @{$facettemp};
+		my @vertices;
+		for my $i (0..$dim - 1){
+			push(@vertices, $diagram->[$facet[$i]]);
+		}
+		if(isAffIndep(\@vertices) == 0){
+			return 0;
+		}
+	}
+	return 1;
+
+
+}
+
+
+
 
 
 #usage:findTriangulated($diagram, $triangulateddiagram, $facet)
@@ -3591,12 +3625,24 @@ sub computeMultiplicity{
 	my $diagram = shift;
 	my $facet = shift;
 	my $reduceddiagram = nonSimpRemoveRedundant($diagram);
-	my $perturbed = perturbNonSimp($reduceddiagram);
+	#finds a good perturbed subdivision
+	my $i = 0;
+	my $perturbed = 0;
+	while($i < 1000){
+		$perturbed = perturbNonSimp($reduceddiagram);
+		if(checkIfGoodTri($reduceddiagram, $perturbed) == 1){
+			$i = 1000;
+		}
+		if ($i == 999){
+			print "No good triangulation found";
+			return -1;
+		}
+		$i += 1;
+	}
 	my $subdiv = diagramToSubdiv($perturbed);
 	my $contributingfacets = findTriangulated($reduceddiagram, $perturbed, $facet);
 	my $mult = 0;
 	for my $face (@{$contributingfacets}){
-		pArr($face);
 		#uses 3 because the 2nd argument of returnQ isn't necessary, and I'm too lazy to fix it
 		my $Q = returnQ($reduceddiagram, 3, $face);
 		my $local_h = relativeLocalH($subdiv, $Q);
@@ -3605,8 +3651,23 @@ sub computeMultiplicity{
 	return $mult;
 }
 
-
-
+#usage: returnNonSimpFacets($diagram)
+#diagram doesn't need to be reduced
+#returns all non-simplicial facets
+sub returnNonSimpFacets{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = nonSimpDiagramToSubdiv($diagram);
+	my @flist = @{$subdiv->FACETS};
+	my @nonsimp;
+	for my $facet (@flist){
+		if(scalar(@{$facet}) > $dim){
+			my @f = @{$facet};
+			push(@nonsimp, \@f);
+		}
+	}
+	return \@nonsimp;
+}
 
 
 
