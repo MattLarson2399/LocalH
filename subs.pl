@@ -1326,7 +1326,39 @@ sub diagramToSubdiv{
 #treats the array of arrays as an array of points
 #all points should have the same dimension, should include the standard basis vectors (must be convenient)
 #does not check if the subdivision is a triangulation
+#should only be used for non-simplicial stuff
 sub nonSimpDiagramToSubdiv{
+	my $diagram = shift;
+	my $proj = toProjectiveArray($diagram);
+	my $shifted = shiftToInfinity($proj);
+	my @new = @{deProjective($shifted)};
+	#points are now in the form (points in simplex in R^d, weight)
+	my @weighvec = ();
+	for my $i (0.. scalar(@new) - 1){
+		$weighvec[$i] = pop(@{$new[$i]});
+	}
+	my $coords = toStandard(\@new);
+	my @baryCoords = map(toBarycentricCoords($_), @{$coords});
+
+
+	my $dim = scalar(scalar(@{$diagram->[0]}));
+	my $weightsRef = new Vector<Rational>(\@weighvec);
+ 	my $baryMat=new Matrix<Rational>(\@baryCoords);
+ 	my $fan = new fan::SubdivisionOfPoints(POINTS=>$baryMat, WEIGHTS=>$weightsRef);
+ 	my $complex = $fan->POLYHEDRAL_COMPLEX;
+    #my $subdiv = new topaz::GeometricSimplicialComplex(COORDINATES=>$baryMat, 
+    #	INPUT_FACES=>regular_subdivision($baryMat, $weightsRef));
+    return $complex;
+
+}
+
+#usage: nonSimpDiagramToSimp(AoA)
+#treats the array of arrays as an array of points
+#all points should have the same dimension, should include the standard basis vectors (must be convenient)
+#does not check if the subdivision is a triangulation
+#returns a simplicial complex even if isn't simplicial
+#can be used to reduce a diagram
+sub nonSimpDiagramToSimp{
 	my $diagram = shift;
 	my $proj = toProjectiveArray($diagram);
 	my $shifted = shiftToInfinity($proj);
@@ -1348,6 +1380,10 @@ sub nonSimpDiagramToSubdiv{
     return $subdiv;
 
 }
+
+
+
+
 
 #usage: isLatticePyramid($diagram, facet)
 #checks if the facet is a lattice pyramid
@@ -2181,18 +2217,7 @@ sub skelToGraph{
 }
 
 
-#usage: findCandidatePole(diagram, facet)
-#returns the candidate pole associated to that facet
-#diagram must be reduced or answer will be wrong!
-sub findCandidatePole{
 
-}
-
-#usage: topologicalZetaFunction($diagram, $subdiv)
-#computes the topological zeta function
-sub topologicalZetaFunction{
-
-}
 #usage: gatherCombTypeData(dim, iter)
 #generates a bunch of subdivisions
 #for each subdivision, find the non-pyramidal faces
@@ -3522,7 +3547,7 @@ sub lookForCD2{
 #returns the reduced diagram
 sub nonSimpRemoveRedundant{
 	my $diagram = shift;
-	my $subdiv = nonSimpDiagramToSubdiv($diagram); 
+	my $subdiv = nonSimpDiagramToSimp($diagram); 
 	my @good = @{$subdiv->VERTEX_INDICES};
 	my @relevant_faces = ();
 	for my $index (@good){
@@ -3535,6 +3560,7 @@ sub nonSimpRemoveRedundant{
 #usage: perturbNonSimp(diagram)
 #diagram should be reduced
 #adds a small random number to vertex other than the vertices that make it convenient
+#adds to the entries that are non-zero
 #this can be used to compute a random triangulation
 sub perturbNonSimp{
 	my $diagram = shift;
@@ -3586,7 +3612,7 @@ sub checkIfGoodTri{
 			push(@vertices, $diagram->[$facet[$i]]);
 		}
 		if(isAffIndep(\@vertices) == 0){
-			return 0;
+			pArr(\@facet);
 		}
 	}
 	return 1;
@@ -3651,6 +3677,26 @@ sub computeMultiplicity{
 	return $mult;
 }
 
+#usage: computeMultiplicity($diagram, $perturbed diagram, $facet)
+#not necessary unless the facet is non-simplicial
+#computes the contribution to the multiplicity of the corresponding eigenvalue
+#does not check if diagram is reduced or if the triangulation is good
+sub computeMultiplicityNoChecks{
+	my $diagram = shift;
+	my $perturbed = shift;
+	my $facet = shift;
+	my $subdiv = diagramToSubdiv($perturbed);
+	my $contributingfacets = findTriangulated($diagram, $perturbed, $facet);
+	my $mult = 0;
+	for my $face (@{$contributingfacets}){
+		#uses 3 because the 2nd argument of returnQ isn't necessary, and I'm too lazy to fix it
+		my $Q = returnQ($diagram, 3, $face);
+		my $local_h = relativeLocalH($subdiv, $Q);
+		$mult += sumArray($local_h);
+	}
+	return $mult;
+}
+
 #usage: returnNonSimpFacets($diagram)
 #diagram doesn't need to be reduced
 #returns all non-simplicial facets
@@ -3672,7 +3718,35 @@ sub returnNonSimpFacets{
 
 
 
+#usage: saveDiagram($list of polytopes, corresponding list of diagrams, name)
+#takes a list of polytopes and corresponding list of diagrams
+sub saveDiagrams{
+	my @polylist = @{shift @_};
+	my $dgramlist = shift;
+	my $name = shift;
+	for my $i (0..scalar(@polylist) - 1){
+		$polylist[$i]->name = diagramToString($dgramlist->[$i]);
+	}
+	script("tarballs");
+	my $file_name = $name . '.tgz';
+	pack_tarball($file_name, @polylist);
+
+}
 
 
+#usage: loadDiagram(name)
+#loads the diagram
+#outputs an ARRAY containing arrefs to the array of polytopes, corresponding array of diagrams
+sub loadDiagrams{
+	script("tarballs");
+	my $name = shift;
+	my $file = $name . ".tgz";
+	my @list = unpack_tarball($file);
+	my @diagrams = ();
+	for my $poly (@list){
+		push(@diagrams, stringToDiagram($poly->name));
+	}
+	return(\@list, \@diagrams);
+}
 
 
