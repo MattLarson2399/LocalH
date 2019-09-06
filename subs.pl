@@ -15,6 +15,11 @@ use Parallel::Loops;
 use List::Compare;
 use Algorithm::Combinatorics "subsets";
 use PDL;
+use PDL::Matrix;
+use PDL::MatrixOps;
+use Math::Matrix;
+
+
 
 #usage: round(number)
 #round to the nearest integer
@@ -1339,7 +1344,7 @@ sub nonSimpDiagramToSubdiv{
 	}
 	my $coords = toStandard(\@new);
 	my @baryCoords = map(toBarycentricCoords($_), @{$coords});
-
+	@baryCoords = @{toProjectiveArray(\@baryCoords)};
 
 	my $dim = scalar(scalar(@{$diagram->[0]}));
 	my $weightsRef = new Vector<Rational>(\@weighvec);
@@ -3641,6 +3646,7 @@ sub findTriangulated{
 #usage: computeMultiplicity($diagram, $facet)
 #not necessary unless the facet is non-simplicial
 #computes the contribution to the multiplicity of the corresponding eigenvalue
+#probably the diagram should be reduced
 sub computeMultiplicity{
 	my $diagram = shift;
 	my $facet = shift;
@@ -3671,14 +3677,34 @@ sub computeMultiplicity{
 }
 
 
+#usage: localHTriangulated($diagram, triangulated simplex, $facet)
+#returned the local h polynomials associated to that facet
+#diagram should be reduced
+sub localHTriangulated{
+	my $diagram = shift;
+	my $perturbed = shift;
+	my $facet = shift;
+	my $contributingfacets = findTriangulated($diagram, $perturbed, $facet);
+	my @localh;
+	for my $face (@{$contributingfacets}){
+		#uses 3 because the 2nd argument of returnQ isn't necessary, and I'm too lazy to fix it
+		my $Q = returnQ($diagram, 3, $face);
+		my $local_h = relativeLocalH($perturbed, $Q);
+		push(@localh, $local_h);
+	}
+	return \@localh;
+
+}
+
+
 #usage: returnNonSimpFacets($diagram)
-#diagram doesn't need to be reduced
+#diagram needs to be full reduced
 #returns all non-simplicial facets
 sub returnNonSimpFacets{
 	my $diagram = shift;
 	my $dim = scalar(@{$diagram->[0]});
-	my $subdiv = nonSimpDiagramToSubdiv($diagram);
-	my @flist = @{$subdiv->MAXIMAL_POLYTOPES};
+	my $subdiv = nonSimpDiagramToSimp($diagram);
+	my @flist = @{$subdiv->FACETS};
 	my @nonsimp;
 	for my $facet (@flist){
 		if(scalar(@{$facet}) > $dim){
@@ -3689,7 +3715,14 @@ sub returnNonSimpFacets{
 	return \@nonsimp;
 }
 
-
+#usage: computeMultiplicityAllNonSimp($diagram)(
+#diagram should be fully reduced
+#returns an arref with all eigenvalues
+sub computeMultiplicityAllNonSimp{
+	my $diagram = shift;
+	my @nonsimp = @{returnNonSimpFacets($diagram)};
+	my @results;
+}
 
 
 #usage: saveDiagram($list of polytopes, corresponding list of diagrams, name)
@@ -3744,21 +3777,22 @@ sub diagramToPerturbedSubdiv{
 	}
 	my $coords = toStandard(\@new);
 	my @baryCoords = map(toBarycentricCoords($_), @{$coords});
-
+	#pArrArr(\@baryCoords);
 
 	my $weightsRef = new Vector<Rational>(\@weighvec);
  	my $baryMat=new Matrix<Rational>(\@baryCoords);
 
  	#hackish fix to make it triangulate properly
- 	my $fan = new fan::SubdivisionOfPoints(POINTS=>$baryMat, WEIGHTS=>$weightsRef);
- 	my $complex = $fan->POLYHEDRAL_COMPLEX;
- 	my $polyfacets = $complex->N_MAXIMAL_POLYTOPES;
+ 	#my $fan = new fan::SubdivisionOfPoints(POINTS=>$baryMat, WEIGHTS=>$weightsRef);
+ 	#my $complex = $fan->POLYHEDRAL_COMPLEX;
+ 	#my $polyfacets = $complex->N_MAXIMAL_POLYTOPES;
 
+ 	#print $baryMat;
     my $subdiv = new topaz::GeometricSimplicialComplex(COORDINATES=>$baryMat, 
     	INPUT_FACES=>regular_subdivision($baryMat, $weightsRef));
-    if ($subdiv->N_FACETS != $polyfacets){
-    	print "Different subdivisions";
-    }
+    #if ($subdiv->N_FACETS != $polyfacets){
+    #	print "Different subdivisions";
+    #}
     #checks if it is not a triangulation
     if ($subdiv->DIM == $dim - 1){
     	return $subdiv;
@@ -3967,8 +4001,120 @@ sub returnUniversallyB1{
 
 }
 
+#usage: normal(AoA)
+#take an array of a bunch of vertices 
+#returns a normal vector 
+#only looks at the first n vectors
+sub normal{
+	my $vectors = shift;
+	my @rows;
+	my @first = @{$vectors->[0]};
+	for my $i (1..(scalar(@first) - 1)){
+		my @row;
+		for my $j (0..(scalar(@first) - 1)){
+			push(@row, $first[$j] - $vectors->[$i]->[$j])
+		}
+		push(@row, 0);
+		push(@rows, \@row);
+	}
+	#pads matrix with an extra row to determine the system and hopefully get integral coefficients
+	my @extra = (1) x (scalar(@first));
+	push (@extra, 111796299014400);
+	push(@rows, \@extra);
+	#pArrArr(\@rows);
+	#push(@rows, \@zero);
+	my $a = new Math::Matrix(@rows);
+	#my $b = $a->transpose;
+	#print $a;
+	#print "\n";
+	#my $zero = vzeroes(scalar(@first));
+	#print $zero;
+	#my $sol = lu_backsub(lu_decomp($a), $zero);
+	my $sol = $a->solve;
+	my @normal;
+	for my $i (0..(scalar(@first) - 1)){
+		push(@normal, $sol->[$i]->[0]);
+	}
+	return \@normal
+
+}
+
+#usage: candidatePole($diagram, $facet)
+#facets needs to actually be a facet
+#returns the candidate pole as a float
+#need to be careful if diagram isn't reduced
+#facet needs to be simplicial
+sub candidatePole{
+	my $diagram = shift;
+	my $facet = shift;
+	my @vertices;
+	for my $index (@{$facet}){
+		push(@vertices, $diagram->[$index]);
+	}
+	my $normal = normal(\@vertices);
+	my $nu = sumArray($normal);
+	my $N = 0;
+	for my $index (0..(scalar(@{$normal}) - 1)){
+		$N += ($vertices[0]->[$index])*($normal->[$index]);
+	}
+	my $candidate = -$nu/$N;
+	return $candidate;
+}
 
 
+#usage: allCandidatePoles(diagram)
+#diagram should be completely reduced
+#returns an arref of all candidate poles 
+#diagram does not need to be simplicial
+#list includes multiplicity
+#does not round
+sub allCandidatePoles{
+	my $diagram = shift;
+	my @candidates;
+	my $subdiv = nonSimpDiagramToSimp($diagram);
+	my @flist = @{$subdiv->FACETS};
+	my $perturbed = diagramToPerturbedSubdiv($diagram);
+	for my $facet (@flist){
+		my @f = @{$facet};
+		my $tri = findTriangulated($diagram, $perturbed, \@f)->[0];
+		push(@candidates, candidatePole($diagram, $tri));	
+	}
+	return \@candidates;
+
+}
+
+#usage: fakeCandidatePoles($diagram)
+#diagram should be reduced
+#returns an array of the candidate poles such that every facet that contributes them contributes to the 
+#corresponding eigenvalue with multiplicity 0
+#if topological monodromy conjecture is true, these should be fake poles
+sub fakeCandidatePoles{
+
+}
+
+#usage: allTriangulations($diagram, $iter)
+#generates $iter random triangulations of a non-simplicial diagram
+#returns a list of the unique triangulations
+#only checks if they are combinatorially isomorphic, not isomorphic as subdivisions
+sub allTriangulations{
+	my $diagram = shift;
+	my $iter = shift;
+	my @uniques;
+	for my $i (0..($iter - 1)){
+		my $unique = 1;
+		my $perturbed = diagramToPerturbedSubdiv($diagram);
+		for my $subdiv (@uniques){
+			if (isomorphic($subdiv, $perturbed)){
+				$unique = 0;
+				last;
+			}
+		}
+		if ($unique == 1){
+			push(@uniques, $perturbed);
+		}
+	}
+	return \@uniques;
+}
 
 
 

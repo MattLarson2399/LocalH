@@ -52,6 +52,15 @@ sub multiplicityArray{
 	return $gcd;
 }
 
+#usage: dualFan($diagram)
+#returns the part of the normal/dual fan 
+sub dualFan{
+	my $diagram = shift;
+	my $proj = toProjectiveArray($diagram);
+	my $poly = new Polytope(POINTS=>$proj);
+	my $fan = fan::normal_fan($poly);
+	return $fan;
+}
 
 #usage:facetContribution(diagram, array of vertices)
 #the array of vertices should form a facet
