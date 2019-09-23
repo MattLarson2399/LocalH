@@ -11,7 +11,6 @@ use warnings;
 use Benchmark qw(:all);
 use application "polytope";
 use List::Util 'shuffle';
-use Parallel::Loops;
 use List::Compare;
 use Algorithm::Combinatorics "subsets";
 use PDL;
@@ -4083,14 +4082,6 @@ sub allCandidatePoles{
 
 }
 
-#usage: fakeCandidatePoles($diagram)
-#diagram should be reduced
-#returns an array of the candidate poles such that every facet that contributes them contributes to the 
-#corresponding eigenvalue with multiplicity 0
-#if topological monodromy conjecture is true, these should be fake poles
-sub fakeCandidatePoles{
-
-}
 
 #usage: allTriangulations($diagram, $iter)
 #generates $iter random triangulations of a non-simplicial diagram
@@ -4115,8 +4106,218 @@ sub allTriangulations{
 	}
 	return \@uniques;
 }
+#usage: toReverseProjective(aref)
+#adds a 1 to the start of the array
+#interpret as projectivizing the point
+sub toReverseProjective{
+	my $aref = shift;
+	my @array = @{$aref};
+	my @one = (1);
+	push(@one, @array);
+	return \@one;
+}
 
 
+#usage: toProjectiveArray($AoA)
+#takes an arref of arrefs
+#interprets as an array of points
+#projectivizes them by adding 1 to start of each coord
+sub toReverseProjectiveArray{
+	my $aref = shift;
+	my @array = @{$aref};
+	my @proj = map(toReverseProjective($_), @array);
+	return \@proj;
+}
 
+#usage: returnLatticePoints($diagram, $face)
+#returns all lattice points in the interior of the box of that face
+sub returnLatticePoints{
+	my @diagram = @{shift @_};
+	my $face = shift;
+	my @verts; 
+	my $num = scalar(@{$face});
+	my $dim = scalar(@{$diagram[0]});
+	my $indices = [0..($num - 1)];
+	my @subsets = subsets($indices);
+	for my $subset (@subsets){
+		my @point = (0) x $dim;
+		for my $index (@{$subset}){
+			for my $i (0..($dim - 1)){
+				$point[$i] += $diagram[$face->[$index]]->[$i];
+			}
+		}
+		push(@verts, \@point);
+	}
+	#forms the polytopes
+	my $proj = toReverseProjectiveArray(\@verts);
+	#my $mat = new Matrix<Rational>($proj);
+	my $poly = new Polytope<Rational>(POINTS=>$proj);
+	#return $poly;
+	my @lattice = @{$poly->INTERIOR_LATTICE_POINTS};
+	my @pointlist = map(vectorToArray($_), @lattice);
+	#turns back into array and deprojectizes
+	map(splice(@{$_}, 0, 1), @pointlist);
+	return \@pointlist;
+}
+
+
+#getFacetList($diagram)
+#returns the list of facets in AoA format
+sub getFacetList{
+	my $diagram = shift;
+	my $simp = diagramToSubdiv($diagram);
+	my @fs = @{$simp->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	return \@fs;
+}
+
+#computeWeight($diagram, $face, $facet containg face, $lattice point interior of box of the face)
+#computes the sum of the coefficients expressing that lattice point as a linear combination of vertices of face
+#used for computing weighted l^* polynomial
+#doesn't actually need the face
+sub computeWeight{
+	my $diagram = shift;
+	my $face = shift;
+	my $facet = shift;
+	my $point = shift;
+	my $numvert = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$numvert){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#solves linear equation
+
+	my @row = @{$point};
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	my @res = $res->list;
+	return canonicalMod1(sumArray(\@res));
+}
+
+#usage: canonicalMod1(number)
+#finds a representative of the number mod 1 that is between 0 and 1
+sub canonicalMod1{
+	my $num = shift;
+	$num = $num - int($num);
+	if ($num < 0){
+		$num += 1;
+	}
+	return $num;
+}
+
+#usage: returnFaceFacet($subdiv)
+#returns all faces in the form of [face, facet that contains the face]
+#facet that contains the face is ar
+sub returnFaceFacet{
+	my $subdiv = shift;
+	my @fs = @{$subdiv->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	#use hash to find unique faces
+	my %hash;
+	my @pairs;
+	for my $facet (@fs){
+		my @faces = subsets($facet);
+		for my $face (@faces){
+			my $str = "@{$face}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@pairs, [$face, $facet]);
+			}
+		}
+	}
+	return \@pairs;
+
+}
+
+#usage: latticePointToArray(lattice point)
+#turns a lattice point into an array
+sub latticePointToArray{
+	my $lattice = shift;
+	my @converted;
+	for my $val(@{$lattice}){
+		push(@converted, "$val");
+	}
+	return \@converted;
+}
+
+#usage: ellStar($diagram, $face, $facet containing face)
+#returns an array giving the coefficients of ellStar of that face evaluated at 1
+sub ellStar{
+	my $diagram = shift;
+	my $face = shift;
+	my $facet = shift;
+	my $lattice = returnLatticePoints($diagram, $face);
+	my @lattice = map(latticePointToArray($_), @{$lattice});
+	my %hash;
+	for my $point(@lattice){
+		my $a = computeWeight($diagram, $face, $facet, $point);
+		if (exists($hash{$a})){
+			$hash{$a} += 1;
+		}
+		else{
+			$hash{$a} = 1;
+		}
+	}
+	my @results;
+	for my $key (keys %hash){
+		push(@results, [$key, $hash{$key}]);
+	}
+	return \@results;
+}
+
+#usage: findLatticePoints($diagram, $face, $facet containing face, $number mod 1)
+#returns all lattice points in the box of that face such that in ell^* term is the number mod 1
+sub findLatticePoints{
+	my $diagram = shift;
+	my $face = shift;
+	my $facet = shift;
+	my $number = shift;
+	my @listofpoints;
+	my $lattice = returnLatticePoints($diagram, $face);
+	my @lattice = map(latticePointToArray($_), @{$lattice});
+	for my $point(@lattice){
+		my $a = computeWeight($diagram, $face, $facet, $point);
+		#allows some numerical imprecision
+		if (abs($a - $number) < 0.0000001){
+			push(@listofpoints, $point);
+		}
+	}
+
+	return \@listofpoints;
+
+}
+
+#usage: linearExpression($diagram, $facet, $point)
+#facet must be simplicial
+#expresses the point as a linear combination of the vertices in the facet
+sub linearExpression{
+	my $diagram = shift;
+	my $facet = shift;
+	my $point = shift;
+	my $numvert = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$numvert){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#solves linear equation
+
+	my @row = @{$point};
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	my @res = $res->list;
+	return \@res;
+}
 
 
