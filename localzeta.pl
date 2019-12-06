@@ -9,9 +9,9 @@ use warnings;
 use application "polytope";
 use PDL;
 use Algorithm::Combinatorics "subsets";
-use Math::Matrix;
+#use Math::Matrix;
 
-script("subs.pl");
+script("/Users/matthew/Desktop/Local_Zeta_Function/code/subs.pl");
 
 #usage: multiplicityArray(AoA)
 #computes the multiplicity of an array of r integer vectors
@@ -31,8 +31,8 @@ sub multiplicityArray{
 		}
 		push(@matrixAoa, \@row);
 	}
-	my $a = new Math::Matrix(@matrixAoa);
-	my $gcd = new Integer abs($a->determinant);
+	my $a = pdl[\@matrixAoa];
+	my $gcd = new Integer abs((det($a)->list)[0]);
 	for my $sub(@minors){
 		@matrixAoa = ();
 		for my $i(0..($num - 1)){
@@ -42,8 +42,8 @@ sub multiplicityArray{
 			}
 			push(@matrixAoa, \@row);
 		}
-		$a = new Math::Matrix(@matrixAoa);
-		my $toint = new Integer(abs($a->determinant));
+		$a = pdl[\@matrixAoa];
+		my $toint = new Integer(abs((det($a)->list)[0]));
 		$gcd = gcd($gcd, $toint);
 		if ($gcd == 1){
 			last;
@@ -52,24 +52,112 @@ sub multiplicityArray{
 	return $gcd;
 }
 
+#usage: newtonPolyhedron($diagram)
+#diagram does not need to be reduced
+#outputs the newton polyhedron as a polyhedron
+sub newtonPolyhedron{
+	my $diagram = shift;
+	my $proj = toReverseProjectiveArray($diagram);
+	my $dim = scalar(@{$diagram->[0]});
+	my $verts = standard_simplex_vertices($dim - 1);
+	map(unshift($_, 0), @{$verts});
+	push(@{$proj}, @{$verts});
+	my $Mat=new Matrix<Rational>($proj);
+	my $p = new Polytope(POINTS=>$Mat);
+	return $p;
+}
+
 #usage: dualFan($diagram)
-#returns the part of the normal/dual fan 
+#creates the dual fan by making the newton polyhedron
 sub dualFan{
 	my $diagram = shift;
-	my $proj = toProjectiveArray($diagram);
-	my $poly = new Polytope(POINTS=>$proj);
-	my $fan = fan::normal_fan($poly);
+	my $newton = newtonPolyhedron($diagram);
+	my $fan = fan::normal_fan($newton);
 	return $fan;
 }
 
-#usage:facetContribution(diagram, array of vertices)
-#the array of vertices should form a facet
+#usage: changeToPrimitive($arref)
+#assumes every entry is either 1 or 0 or a non-integer Rational
+#returns a primitive integer vector in that direction
+sub changeToPrimitive{
+	my @array = @{shift @_};
+	my $denom = 1;
+	for my $n (@array){
+		if (($n == 0) or ($n == 1)){
+			next;
+		}
+		$denom = denominator($n) * $denom;
+	}
+	my @result;
+	for my $n (@array){
+		my $a = new Integer($n * $denom);
+		push(@result, $a);
+	}
+	return makePrimitive(\@result);
+}
 
-sub facetContribution{
-
+#usage:dotProduct($aref, $aref)
+#arefs should be the same length
+#computes the dot product
+sub dotProduct{
+	my $vec1 = shift;
+	my $vec2 = shift;
+	my $answer = 0;
+	for my $i (0..(scalar(@{$vec1}) - 1)){
+		$answer += ($vec1->[$i])*($vec2->[$i]);
+	}
+	return $answer;
 }
 
 
+#usage: computeN($point, $diagram)
+#takes a point in the dual fan
+#compute the minimimum value of the pairing of that with the newton polyhedron
+sub computeN{
+	my $point = shift;
+	my $diagram = shift;
+	my $best = dotProduct($point, $diagram->[0]);
+	for my $i (0..(scalar(@{$diagram}) - 1)){
+		if ($best > dotProduct($point, $diagram->[$i])){
+			$best = dotProduct($point, $diagram->[$i]);
+		}
+	}
+	return $best;
+}
+
+#usage: jDelta(arref of points, diagram)
+#computes J_{\Delta} for the cone spanned by these points
+#points should be primitive, but will make sense if not
+sub jDelta{
+	my @points = @{shift @_};
+	my $diagram = shift;
+	my $mult = multiplicityArray(\@points);
+	my $answer = new UniPolynomial($mult);
+	for my $p (@points){
+		my $n = computeN($p, $diagram);
+		my $v = sumArray($p);
+		my $contrib = new UniPolynomial("$n*x + $v");
+		$answer = $answer/$contrib
+	}
+	return $answer;
+}
+
+#usage: normalizedVolume($arref of lattice points)
+#returns the normalized volume of the convex hull of the vertices
+sub normalizedVolume{
+	my $vertices = shift;
+	my $proj = toReverseProjectiveArray($vertices);
+	my $poly = new LatticePolytope(POINTS=>$proj);
+	return $poly->LATTICE_VOLUME;
+
+}
+
+#usage: subdivideCone(arref of vertices)
+#returns a subdivision of the cone by the convex hull of the vertices 
+#
+sub subdivideCone{
+
+}
 
 
 

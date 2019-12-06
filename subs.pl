@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Jason Schuchardt and Matt Larson
-#Last updated: 08/17/2019
+#Last updated: 11/05/2019
 
 #contains various useful scripts
 #does not have specific things designed to test specific conjectures
@@ -16,7 +16,7 @@ use Algorithm::Combinatorics "subsets";
 use PDL;
 use PDL::Matrix;
 use PDL::MatrixOps;
-use Math::Matrix;
+#use Math::Matrix;
 
 
 
@@ -1449,8 +1449,80 @@ sub returnQ{
 	}
 	return \@Q;
 }
+#usage: posNegDecomp($diagram, $facet)
+#expresse (1,...,1) as a linear combination of vertices in the facet
+#returns AoA of the vertices that are not in Q that are positive and the vertices that are non-positive
+sub posNegDecomp{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$dim){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#now we find where (1,1,..,1) lands
+	#to do this, solve Ax = b, b = (1,1..,1), A = matrix whose rows are the coordinant vectors of the face
+	#The entries that are integers is what we care about
+	#first creates (1,1,,1)
+	my @row = (1) x ($dim + 1);
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	#finds the non-integer, finds Q
+	#due to some stupid machine precision stuff, checks if it is within 10^{-8}
+	my @pos = ();
+	my @neg = ();
+	my @res = $res->list;
+	for my $j (0..$dim){
+		if (abs($res[$j] - round($res[$j])) > 0.00000001){
+			next;
+		}
+		if ($res[$j] > 0.00000001){
+			push(@pos, $facet->[$j]);
+			next;
+		}
+		if ($res[$j] < 0.00000001){
+			push(@neg, $facet->[$j]);
+			next;
+		}
+	}
+	return [\@pos, \@neg];
 
+}
 
+#usage: returnLinearExpression($diagram, $facet)
+#expresse (1,...,1) as a linear combination of vertices in the facet
+#returns coefficients
+sub returnLinearExpression{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$dim){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#now we find where (1,1,..,1) lands
+	#to do this, solve Ax = b, b = (1,1..,1), A = matrix whose rows are the coordinant vectors of the face
+	#The entries that are integers is what we care about
+	#first creates (1,1,,1)
+	my @row = (1) x ($dim + 1);
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	my @res = $res->list;
+	return \@res;
+
+}
 #usage: checkFacet($diagram, $subdivision, facet)
 #input the diagram as an AoA
 #input the associated subdivision
@@ -3080,6 +3152,7 @@ sub sameVariable{
 #diagram must be reduced
 #searches for B_1 facets that share a face of codimension 1, don't contribute and are not both B_1 in the same variable
 #returns an array of bad pairs
+#this is only indirectly checking if they are B_1 because non-contributing facets must be B_1
 sub checkBadFacets{
 	my $diagram = shift;
 	my $subdiv = shift;
@@ -3102,12 +3175,40 @@ sub checkBadFacets{
 	return \@bad;
 }
 
+#usage: allBadB1($diagram, $subdiv)
+#diagram must be reduced
+#find all pairs of B_1 facets that share a face of codimension 1 and are not both B_1 in the same variable
+#and also contribute the same candidate pole
+#so finds all B-borders
+sub allBadB1{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my @bs = @{returnB1Facets($diagram, $subdiv)};
+	my @fs = map(vectorToArray($_), @bs);
+	my @pairs = subsets([0..scalar(@fs) - 1], 2);
+	my @bad = ();
+	for my $pair (@pairs){
+		#checks if they share a face of cd 1
+		my @u = @{union($fs[$pair->[0]], $fs[$pair->[1]])};
+		if (scalar(@u) > scalar(@{$fs[0]}) + 1){
+			next;
+		}
+		if (not sameVariable($diagram, $fs[$pair->[0]], $fs[$pair->[1]])){
+			if ((candidatePole($diagram, $fs[$pair->[0]]) - candidatePole($diagram, $fs[$pair->[1]])) == 0){
+				push(@bad, ($fs[$pair->[0]], $fs[$pair->[1]]));
+			}
+		}
+	}
+	return \@bad;
+}
+
 #usage: checkABunch($dim, $iter)
 #generates a bunch of diagrams
 #checks if there is a pair of bad B_1 facets
 sub checkABunch{
 	my $dim = shift;
 	my $iter = shift;
+	my @list;
 	for my $i (0..$iter - 1){
 		my $diagram = sumRND($dim, 10000, 15, 20);
 		my $subdiv = diagramToSubdiv($diagram);
@@ -3115,13 +3216,82 @@ sub checkABunch{
 			next;
 		}
 		$diagram = removeRedundant($diagram, $subdiv);
-		my @bad = @{checkBadFacets($diagram, $subdiv)};
+		my @bad = @{allBadB1($diagram, $subdiv)};
 		if (scalar(@bad) > 0){
-			pArrArr $diagram;
-			pArrArr(\@bad);
+			push(@list, $diagram);
 		}
 	}
+	return \@list;
 }
+
+#usage: bunchOfPotentiallyBad($dim, $iter)
+#generates a bunch of diagrams
+#checks if they have a pair of B_1 facets that intersect in a face of codimension 1, not in the same variable
+#that also contribute the same candidate pole
+#does not check if local h relative to them vanishes
+sub bunchOfPotentiallyBad{
+	my $dim = shift;
+	my $iter = shift;
+	my @list;
+	for my $i (0..$iter - 1){
+		my $diagram = sumRND($dim, 10000, 15, 20);
+		my $subdiv = diagramToSubdiv($diagram);
+		if ($subdiv == 1){
+			next;
+		}
+		$diagram = removeRedundant($diagram, $subdiv);
+		my @bad = @{allBadB1($diagram, $subdiv)};
+		if (scalar(@bad) > 0){
+			if ((candidatePole($diagram, $bad[0]) - candidatePole($diagram, $bad[1])) == 0){
+				push(@list, $diagram);
+			}
+		}
+	}
+	return \@list;
+
+}
+
+
+#usage: checkIfBorder($diagram, $facet1, $facet2)
+#checks if the facets are a B^2 border 
+#checks if they are both B_1 facets that are not B_1 in the same variable and share a face of cd 1- returns -1 if not
+#checks if the middle face looks like a B^2 border
+#returns the number of peaks
+#if number of peaks is at least 3, then it is well-structured
+sub checkIfBorder{
+	my $diagram = shift;
+	my $facet1 = shift;
+	my $facet2 = shift;
+	my $dim = scalar(@{$facet1});
+
+	#finds the common face
+	#need to test this
+	my $lc = List::Compare->new(($facet1, $facet2));
+	my @intersection = $lc->get_intersection;
+	@intersection = sort {$a <=> $b} @intersection;
+	#checks if share a face of cd 1
+	if (scalar(@intersection) != ($dim - 1)){
+		return -1;
+	}
+	#checks if they are B_1 in same variable
+	if (sameVariable($diagram, $facet1, $facet2)){
+		return -1;
+	}
+	#looks for coordinates in the intersection that have only one 1
+	my @candidates;
+	for my $i (0..$dim - 1){
+		my $sum = 0;
+		for my $v (@intersection){
+			$sum += ($diagram->[$v])->[$i];
+		}
+		if ($sum == 1){
+			push(@candidates, $i);
+		}
+	}
+	#I think that if #candidates > 2, then it should be a border
+	return scalar(@candidates);
+}
+
 
 #usage: isAffIndep(AoA)
 #feed a reference to an array of vectors
@@ -3166,7 +3336,6 @@ sub noGoodTriangulation{
 #usage: isB1Facets(diagram, array of vertices)
 #checks if the facet is a B_1 facets
 #does not assume that the facet is simplicial
-#does not check if it is B_1
 sub isB1Facet{
 	my $diagram = shift;
 	my @verts = @{shift @_};
@@ -3466,6 +3635,7 @@ sub AoAUnion{
 #usage:generateABunchOfDiagrams(dimension, number of iterations)
 #returns a bunch of reduced that give triangulations
 #may return fewer diagrams because the random diagrams it generates might be non-simplicial
+#produces reduce diagrams!
 sub generateABunchOfDiagrams{
 	my $dim = shift;
 	my $iter = shift;
@@ -4013,28 +4183,41 @@ sub normal{
 		for my $j (0..(scalar(@first) - 1)){
 			push(@row, $first[$j] - $vectors->[$i]->[$j])
 		}
-		push(@row, 0);
+		#push(@row, 0);
 		push(@rows, \@row);
 	}
 	#pads matrix with an extra row to determine the system and hopefully get integral coefficients
 	my @extra = (1) x (scalar(@first));
-	push (@extra, 111796299014400);
+#	pArrArr(\@rows);
 	push(@rows, \@extra);
 	#pArrArr(\@rows);
 	#push(@rows, \@zero);
-	my $a = new Math::Matrix(@rows);
+	my $a = pdl[\@rows];
+#	print $a;
+	my $inv = inv($a);
+#	print $inv;
+	my @row = (0) x (scalar(@first) - 1);
+	push(@row, 1);
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+#	print $target;
+	my $res = $inv x $target;
+	my @res = $res->list;
+#	pArr \@res;
+	return \@res;
 	#my $b = $a->transpose;
 	#print $a;
 	#print "\n";
 	#my $zero = vzeroes(scalar(@first));
 	#print $zero;
 	#my $sol = lu_backsub(lu_decomp($a), $zero);
-	my $sol = $a->solve;
-	my @normal;
-	for my $i (0..(scalar(@first) - 1)){
-		push(@normal, $sol->[$i]->[0]);
-	}
-	return \@normal
+	
+	#my $sol = $a->solve;
+	#my @normal;
+	#for my $i (0..(scalar(@first) - 1)){
+	#	push(@normal, $sol->[$i]->[0]);
+	#}
+	#return \@normal
 
 }
 
@@ -4319,5 +4502,500 @@ sub linearExpression{
 	my @res = $res->list;
 	return \@res;
 }
+
+#usage: minCritFace($diagram, $facet)
+#returns the minimal critical face contained in the facet
+#i.e., returns the minimal face whose affine span intersects the ray spanned by (1,...,1)
+#diagram must be reduced
+sub minCritFace{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$dim){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#now we find where (1,1,..,1) lands
+	#to do this, solve Ax = b, b = (1,1..,1), A = matrix whose rows are the coordinant vectors of the face
+	#The entries that are integers is what we care about
+	#first creates (1,1,,1)
+	my @row = (1) x ($dim + 1);
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	#finds the non-integer, finds Q
+	#due to some stupid machine precision stuff, checks if it is within 10^{-8}
+	my @crit = ();
+	my @res = $res->list;
+	for my $j (0..$dim){
+		if (abs($res[$j]) > 0.00000001){
+			push(@crit, $facet->[$j]);
+		}
+	}
+	return \@crit;
+}
+
+#usage: returnPeak($diagram, $face, coordinate)
+#check if the face is B_1 in that coordinate
+#if it is, returns the peak
+#if it is not, returns -1
+sub returnPeak{
+	my $diagram = shift;
+	my @face = @{shift @_};
+	my $coordinate = shift;
+	my $peak = -1;
+	for my $vertex (@face){
+		if ($diagram->[$vertex]->[$coordinate] > 1){
+			return -1;
+		}
+
+		if ($diagram->[$vertex]->[$coordinate] == 1){
+			if ($peak == -1){
+				$peak = $vertex;
+			}
+			else{
+				return -1;
+			}
+		}
+	}	
+	return $peak;
+}
+
+#usage: returnRelativePeak($diagram, $face, coordinate)
+#check if the face is B_1 in that coordinate
+#if it is, returns the relative position of the peak in the face
+#if it is not, returns -1
+sub returnRelativePeak{
+	my $diagram = shift;
+	my @face = @{shift @_};
+	my $numvert = scalar(@face);
+	my $coordinate = shift;
+	my $peak = -1;
+	for my $i (0..($numvert - 1)){
+		if ($diagram->[$face[$i]]->[$coordinate] > 1){
+			return -1;
+		}
+
+		if ($diagram->[$face[$i]]->[$coordinate] == 1){
+			if ($peak == -1){
+				$peak = $i;
+			}
+			else{
+				return -1;
+			}
+		}
+	}	
+	return $peak;
+}
+
+#usage: faceType($diagram, $face)
+#takes a face that should be a critical facet to be interesting
+#Finds all directions that this face is B_1 in
+#arranges them based on which vertex is the peak
+#returns an array of the number of vertices that each peak is B_1 in, sorted
+#returns 0 if it is not a B_1 face
+sub faceType{
+	my $diagram = shift;
+	my @face = @{shift @_};
+	my $numvert = scalar(@face);
+	my $dim = scalar(@{$diagram->[0]});
+	my @peaks = (0) x ($numvert);
+	for my $i (0..($dim - 1)){
+		if (returnRelativePeak($diagram, \@face, $i) > -1){
+			$peaks[returnRelativePeak($diagram, \@face, $i)] += 1;
+		}
+	}
+	#sorts and removes 0's
+	my @type = sort {$b <=> $a} @peaks;
+	if ($type[0] == 0){
+		return 0;
+	}
+	for my $i (0..($numvert -1)){
+		if($type[$numvert - 1 - $i] == 0){
+			pop(@type);
+		}
+		else{
+			return \@type;
+		}
+	}
+
+}
+
+#usage: hasGoodType($diagram, $face)
+#check if the face is B_1 face and has good type, i.e. all entries at least 2
+#returns 1 if it has good type, 0 otherwise
+sub hasGoodType{
+	my $diagram = shift;
+	my $face = shift;
+	my $type = faceType($diagram, $face);
+	if ($type == 0){
+		return 0;
+	}
+	my $num = scalar(@{$type});
+	if ($type->[$num - 1] > 1){
+		return 1;
+	}
+	return 0;
+}
+
+#usage: lookForGoodType($diagram, $subdiv)
+#check if the essential face of any of the B_1 facets has good type
+#returns 0 if none of them have good type
+#returns an AoA of the faces that do have good type
+sub lookForGoodType{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my @B1s = @{returnB1Facets($diagram, $subdiv)};
+	my @good;
+	for my $facet (@B1s){
+		my $crit = minCritFace($diagram, $facet);
+		if (hasGoodType($diagram, $crit)){
+			push(@good, $crit);
+		}
+	}
+	if (scalar(@good) == 0){
+		return 0;
+	}
+	return removeDuplicates(\@good);
+}
+
+#usage: findFacet($simplicial complex, $face)
+#finds a facet containing that face
+#if it isn't a face, returns 0
+sub findFacet{
+	my $simp = shift;
+	my $face_u = shift;
+	#sorts face
+	my @face = sort {$a <=> $b} @{$face_u};
+	my $size = scalar(@face);
+	#iterates through the facets. returns 1 if it finds the face
+	my $facets = $simp->FACETS;
+	my $num = $simp->N_FACETS;
+	for my $i (0..$num - 1){
+		my $facet = $facets->[$i];
+		my @facet = @{$facet};
+		my $index = 0;
+		for my $j (0..scalar(@facet) - 1){
+			if ($facet[$j] > $face[$index]){
+				last;
+			}
+			elsif ($facet[$j] == $face[$index]){
+				$index += 1;
+				if ($index == $size){
+					return $facet;
+				}
+			}
+		}
+
+	}
+	return 0;
+}
+
+
+#usage: testConjecture($diagram)
+#test's Alan's conjecture on non-vanishing of local h with good type
+#diagram should be reduced
+#returns 1 if conjecture holds
+#returns 0 if it does not hold
+sub testAlanConjecture{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my $type = lookForGoodType($diagram, $subdiv);
+	if ($type == 0){
+		return 1;
+	}
+	for my $face (@{$type}){
+		my @facet = @{findFacet($subdiv, $face)};
+		my $Q = returnQ($diagram, 3, \@facet);
+		if (sumArray(relativeLocalH($subdiv, $Q)) == 0){
+			print "Found counterexample";
+			return 0;
+		}
+	}
+	return 1;
+}
+
+sub refinedTest{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my $type = lookForGoodType($diagram, $subdiv);
+	if ($type == 0){
+		return 1;
+	}
+	for my $face (@{$type}){
+		my @facetype = @{faceType($diagram, $face)};
+		pArr(\@facetype);
+		my $r = scalar(@facetype);
+		my @facet = @{findFacet($subdiv, $face)};
+		my $Q = returnQ($diagram, 3, \@facet);
+		my $E = scalar(@{$Q});
+		my $tildeE = scalar(@{$face});
+		my $posverts = posNegDecomp($diagram, \@facet)->[0];
+		my $G_1r = scalar(@{$posverts});
+		my $G_2r = $tildeE - $E - $G_1r + $r;
+		my $local = relativeLocalH($subdiv, $Q);
+		if (($local->[$G_1r] == 0) or ($local->[$G_2r] == 0)){
+			print "Found counterexample";
+			return 0;
+		}
+	}
+	return 1;
+
+}
+
+
+#usage: allBigFaces($diagram, $size)
+#generates all faces that have at least $size vertices
+sub allBigFaces{
+	my $subdiv = shift;
+	my $size = shift;
+	my @fs = @{$subdiv->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	#use hash to find unique faces
+	my %hash;
+	my @allfaces;
+	for my $facet (@fs){
+		my @faces = subsets($facet);
+		for my $face (@faces){
+			if (scalar(@{$face}) < $size){
+				next;
+			}
+			my $str = "@{$face}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@allfaces, $face);
+			}
+		}
+	}
+	return \@allfaces;
+
+}
+
+#usage: testGeneralizedConjectureOne$diagram, face)
+#checks if there is a tripartion of the face into stuff satisfying the conjecture where P is a vertex
+#returns 0 if there is not
+#returns the coefficients that should be non-zero
+sub testGeneralizedConjectureOne{
+	my $diagram = shift;
+	my @face = @{shift @_};
+	my $fsize = scalar(@face);
+	if (scalar(@{carrier($diagram, \@face)}) > 0){
+		return 0;
+	}
+	#tests each vertex one by one
+	for my $v (@face){
+		#generates the rest of the face
+		my @remains;
+		for my $w (@face){
+			if ($w != $v){
+				push(@remains, $w);
+			}
+		}
+		#checks the carrier condition
+		if(scalar(@{carrier($diagram, \@remains)}) < 2){
+			next;
+		}
+		#now looks at paritions of the remains
+		my @totest = subsets(\@remains);
+		for my $G (@totest){
+			push(@{$G}, $v);
+			if (scalar(@{carrier($diagram, $G)}) > 0){
+				next;
+			}
+
+			#checks if the complement of $G with interior is also interior
+			my $lc = List::Compare->new($G, \@face);
+			my @others = $lc->get_complement;
+			push(@others, $v);
+			if (scalar(@{carrier($diagram, \@others)}) == 0){
+				my $coef1 = scalar(@{$G});
+				my $coef2 = scalar(@others);
+				return [$coef1, $coef2];
+			}
+
+
+		}
+
+	}
+	return 0;
+}
+
+#usage: testGeneralizedConjectureTwo($diagram, face)
+#checks if there is a tripartion of the face into stuff satisfying the conjecture where P has size 2
+#returns 0 if there is not
+#returns the tripation if there is
+#should have no interior vertices
+sub testGeneralizedConjectureTwo{
+	my $diagram = shift;
+	my @face = @{shift @_};
+	my $fsize = scalar(@face);
+	if (scalar(@{carrier($diagram, \@face)}) > 0){
+		return 0;
+	}
+	#tests each vertex one by one
+	for my $v (@face){
+		#generates the rest of the face
+		my @other;
+		for my $w (@face){
+			if ($w != $v){
+				push(@other, $w);
+			}
+		}
+
+		#checks the carrier condition
+		if(scalar(@{carrier($diagram, \@other)}) < 2){
+			next;
+		}
+		for my $w(@face){
+			if ($w == $v){
+				next;
+			}
+			my @remains;
+			for my $z (@face){
+				if ($z != $w){
+					push(@remains, $z);
+				}
+			}
+			#checks the carrier condition
+			if(scalar(@{carrier($diagram, \@remains)}) < 2){
+				next;
+			}
+			#now partitions the remaining vertices
+			my @verts;
+			for my $z (@face){
+				if (($z != $v) and ($z != $w)){
+					push(@verts, $z);
+				}
+			}
+			#now looks at paritions of the vertices
+			my @totest = subsets(\@verts);
+			for my $G (@totest){
+				push(@{$G}, $v);
+				push(@{$G}, $w);
+				if (scalar(@{carrier($diagram, $G)}) > 0){
+					next;
+				}
+
+				#checks if the complement of $G with interior is also interior
+				my $lc = List::Compare->new($G, \@face);
+				my @others = $lc->get_complement;
+				push(@others, $v);
+				push(@others, $w);
+				if (scalar(@{carrier($diagram, \@others)}) == 0){
+					my $coef1 = scalar(@{$G});
+					my $coef2 = scalar(@others);
+					return [$coef1, $coef2];
+				}
+			}
+
+
+
+			
+
+	
+
+		
+
+
+
+		}
+
+	}
+	return 0;
+}
+
+
+
+
+#usage: testConverse(subdiv)
+#subdiv should have no interior vertices, but it is probably fine 
+#if local h is 0, tests Alan's conjecture
+#if local h is non-zero, tests if there is a witness to this from Alan's conjecture
+#returns -1 if it finds a counterexample
+#returns 0 if all is well
+#returns 1 if local h is non-zero but there is no witness
+#works in up to dim 4, might miss a witness with |P| = 3 in dim 5
+sub testConverse{
+	my $subdiv = shift;
+	my $local = relativeLocalH($subdiv, []);
+	my $iszero = sumArray($local);
+	my $facestocheck = allBigFaces($subdiv, 2);
+	if ($iszero == 0){
+		for my $face (@{$facestocheck}){
+			if ((testGeneralizedConjectureTwo($subdiv, $face) != 0) or (testGeneralizedConjectureOne($subdiv, $face) != 0)){
+				return -1;
+			}
+		}
+		return 0;
+	}
+	for my $face (@{$facestocheck}){
+		if ((testGeneralizedConjectureTwo($subdiv, $face) != 0) or (testGeneralizedConjectureOne($subdiv, $face) != 0)){
+				return 0;
+		}
+	}
+	return 1;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
