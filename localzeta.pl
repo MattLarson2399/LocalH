@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Matt Larson
-#Last updated: 08/17/2019
+#Last updated: 12/05/2019
 
 #computes the topological local zeta function associated to a Newton polyhedron
 
@@ -19,32 +19,46 @@ script("/Users/matthew/Desktop/Local_Zeta_Function/code/subs.pl");
 #in the vector space spanned by the vectors
 #does this by taking the gcd of the determinents of the rxr minors
 sub multiplicityArray{
-	my @vectors = @{shift @_};
-	my $num = scalar(@vectors);
-	my @minors = subsets([0..scalar(@{$vectors[0]})-1], $num);
+	my @input = @{shift @_};
+	my @vecs = map(latticePointToArray($_), @input);
+	my $num = scalar(@vecs);
+	my @minors = subsets([0..scalar(@{$vecs[0]})-1], $num);
 	#constructs matrix 
 	my @matrixAoa = ();
 	for my $i(0..($num - 1)){
 		my @row = ();
 		for my $j (0..($num - 1)){
-			push(@row, $vectors[$i]->[$j]);
+			push(@row, $vecs[$i]->[$j]);
 		}
 		push(@matrixAoa, \@row);
 	}
 	my $a = pdl[\@matrixAoa];
-	my $gcd = new Integer abs((det($a)->list)[0]);
+	my $d = det($a);
+	my $gcd;
+	if ($d == 0){
+		$gcd = 0;
+	}
+	else{
+		$gcd = new Integer abs((det($a)->list)[0]);
+	}
 	for my $sub(@minors){
 		@matrixAoa = ();
 		for my $i(0..($num - 1)){
 			my @row = ();
 			for my $j (0..($num - 1)){
-				push(@row, $vectors[$i]->[$sub->[$j]]);
+				push(@row, $vecs[$i]->[$sub->[$j]]);
 			}
 			push(@matrixAoa, \@row);
 		}
 		$a = pdl[\@matrixAoa];
-		my $toint = new Integer(abs((det($a)->list)[0]));
-		$gcd = gcd($gcd, $toint);
+		my $d = det($a);
+		if ($d == 0){
+			$gcd = 0;
+		}
+		else{
+			my $toint = new Integer(abs((det($a)->list)[0]));
+			$gcd = gcd($gcd, $toint);
+		}
 		if ($gcd == 1){
 			last;
 		}
@@ -81,6 +95,7 @@ sub dualFan{
 #returns a primitive integer vector in that direction
 sub changeToPrimitive{
 	my @array = @{shift @_};
+	#@array = map(vectorToArray($_), @array);
 	my $denom = 1;
 	for my $n (@array){
 		if (($n == 0) or ($n == 1)){
@@ -132,6 +147,7 @@ sub jDelta{
 	my @points = @{shift @_};
 	my $diagram = shift;
 	my $mult = multiplicityArray(\@points);
+	#my $mult = 1;
 	my $answer = new UniPolynomial($mult);
 	for my $p (@points){
 		my $n = computeN($p, $diagram);
@@ -154,12 +170,151 @@ sub normalizedVolume{
 
 #usage: subdivideCone(arref of vertices)
 #returns a subdivision of the cone by the convex hull of the vertices 
-#
 sub subdivideCone{
+	my $rays = shift;
+	my $cone = new Cone(RAYS=>$rays);
+	my $t = $cone->TRIANGULATION;
+	my $vectorsubdiv = $t->FACETS;
+	my @subdiv = map(vectorToArray($_), @{$vectorsubdiv});
+	return \@subdiv;
+}
 
+#usage: totalContribution(rays of a cone, diagram)
+#subdivides the cone into rational simplicial parts and returns the total contribution
+sub totalContribution{
+	my $rays = shift;
+	my $diagram = shift;
+	my $primitive = subdivideCone($rays);
+	my $answer = new UniPolynomial("0");
+	for my $tri (@{$primitive}){
+		my @subdividedrays = map($rays->[$_], @{$tri});
+		my @prim = map(changeToPrimitive($_), @subdividedrays);
+		$answer = $answer + jDelta(\@prim, $diagram);
+	}
+	return $answer;
 }
 
 
+#usage: allCones(Fan)
+#returns all cones of the fan
+#includes the empty cone
+sub allCones{
+	my $fan = shift;
+	my @cones = @{$fan->MAXIMAL_CONES};
+	my @allcones;
+	my %hash;	
+	for my $cone (@cones){
+		my @c = @{$cone};
+		my @subcones = subsets(\@c);
+		for my $sc (@subcones){
+			my $str = "@{$sc}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@allcones, $sc);
+			}
+		}
+	}
+	return \@allcones;
+}
+
+
+#usage: allConesByDim($fan)
+#returns an Array of Array of Arrays
+#first array is the dimension of the cone
+#second AoA contains all cones of that dimension
+sub allConesByDim{
+	my $fan = shift;
+	my @cones = @{$fan->CONES};
+	my @results;
+	for my $i (0..(($fan->DIM) - 1)){
+		my @cdims = map(vectorToArray($_), @{$cones[$i]});
+		push(@results, \@cdims);
+	}
+	return \@results;
+}
+
+#usage: findFace(cone, diagram)
+#takes a cone in the dual cone, returns the face in the newton polyhedron that it corresponds to
+#input cone as an array of spanning vertices 
+#they should actually be a non-empty cone in the dual fan
+#returns the indices of the vertices
+sub findFace{
+	my @cone = @{shift @_};
+	my $diagram = shift;
+	my $n = computeN($cone[0], $diagram);
+	my @face;
+	for my $vertex (0..(scalar(@{$diagram}) - 1)){
+		if (dotProduct($diagram->[$vertex], $cone[0]) == $n){
+
+			push(@face, $vertex);
+		}		
+	}
+	for my $index (1..(scalar(@cone) - 1)){
+		$n = computeN($cone[$index], $diagram);
+		my @face2;
+		for my $vertex (0..(scalar(@{$diagram}) - 1)){
+			if (dotProduct($diagram->[$vertex], $cone[$index]) == $n){
+				push(@face2, $vertex);
+			}
+		}
+		my $lc = List::Compare->new(\@face, \@face2);
+		@face = $lc->get_intersection;		
+	}
+	return \@face;
+}
+
+
+#usage: localZetaFunction($diagram)
+#computes the local zeta function
+#for now only works for simplicial, because otherwise I need to do something more intelligent to compute the dim of a face
+sub localZetaFunction{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $fan = dualFan($diagram);
+	my $zeta = new UniPolynomial("0");
+	my @rays = @{$fan->RAYS};
+	my @cones = @{allConesByDim($fan)};
+	#my @allcones = @{allCones($fan)};			
+	my $factor = new UniPolynomial "x/(x + 1)";
+	#cdim + 1 = dimension of cone
+	#dimension of facet = dim - cdim - 1
+	for my $cdim (0..($dim - 1)){
+		for my $cone (@{$cones[$cdim]}){
+			my @theserays = map(\@{$rays[$_]}, @{$cone});
+			my $face = findFace(\@theserays, $diagram);
+			my $num = scalar(@{$face});
+			#non-compact faces
+			if ((scalar(@{$face}))!= ($dim - $cdim)){
+				next;
+			}
+			if ($num == 1){
+				$zeta = $zeta + totalContribution(\@theserays, $diagram);
+			}
+			if ($num > 1){
+				my $contrib = totalContribution(\@theserays, $diagram);
+				my $dim = scalar(@{$face}) - 1;
+				my @verts = map($diagram->[$_], @{$face});
+				my $coef = powMinusOne($dim)*normalizedVolume(\@verts);
+				$zeta = $zeta + $factor*$coef*$contrib;
+			}
+		}
+	}
+	return $zeta;
+}
+
+#usage: isPole($rational function, $point)
+#returns 1 if it is a pole 
+#returns 0 if it is not a pole
+sub isPole{
+	my $rational = shift;
+	my $point = shift;
+	my $denom = denominator($rational);
+	my $ans = $denom->evaluate($point);
+	if (abs($ans) < 0.00000001){
+		return 1;
+	}
+	return 0;
+}
 
 
 
