@@ -2283,6 +2283,57 @@ sub typeGraph{
 	return $graph;
 }
 
+#usage: addTypeGraph($list, $graphs)
+#finds the type graph of every facet in the list, adds the isomorphism classes to those already in $graphs
+#graphs should be a list of isomoprhism classes.
+#returns the list
+sub addTypeGraph{
+	my $list = shift;
+	my $graphs = shift;
+	my @newgraphs;
+	for my $subdiv (@{$list}){
+		my @facets = @{$subdiv->FACETS};
+		for my $f (@facets){
+			push(@newgraphs, typeGraph($subdiv, \@{$f}));
+		}
+	}
+	#removes those already in $graphs
+	for my $g (@newgraphs){
+		my $new = 1;
+		for my $graph (@{$graphs}){
+			if (isomorphic($g, $graph)){
+				$new = 0;
+				last;				
+			}
+
+		}
+		if ($new == 1){
+			push(@{$graphs}, $g);
+		}
+	}
+	return $graphs;
+
+}
+
+
+#usage: writeTypeGraph(list of type graphs, filename)
+#graphs should be simplicial complexes
+#filename should already exist, need to give the full path
+#writes to a file in the form of a list of edges on each line
+#the vertices numbered 0-dim are the vertices, other vertices are the faces. 
+sub writeTypeGraph{
+	my $list = shift;
+	my $filename = shift;
+	open(my $fh, '>', $filename) or die "Could not open file '$filename' $!";
+	for my $f (@{$list}){
+		my @facets = @{$f->FACETS};
+		for my $edge(@facets){
+			my @edge = @{$edge};
+			print $fh "($edge[0],$edge[1])";
+		}
+		print $fh "\n";
+	}
+}
 
 #usage: skelToGraph(1-dimensional simplicial complex)
 #returns a graph of that complex

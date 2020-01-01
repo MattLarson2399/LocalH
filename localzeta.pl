@@ -91,7 +91,7 @@ sub dualFan{
 }
 
 #usage: changeToPrimitive($arref)
-#assumes every entry is either 1 or 0 or a non-integer Rational
+#assumes every entry is either 1 or 0 or a non-integer Rational - must use the polymake type
 #returns a primitive integer vector in that direction
 sub changeToPrimitive{
 	my @array = @{shift @_};
@@ -155,6 +155,7 @@ sub jDelta{
 		my $contrib = new UniPolynomial("$n*x + $v");
 		$answer = $answer/$contrib
 	}
+	#print $answer, "\n";
 	return $answer;
 }
 
@@ -188,6 +189,7 @@ sub totalContribution{
 	my $answer = new UniPolynomial("0");
 	for my $tri (@{$primitive}){
 		my @subdividedrays = map($rays->[$_], @{$tri});
+		#pArrArr(\@subdividedrays);
 		my @prim = map(changeToPrimitive($_), @subdividedrays);
 		$answer = $answer + jDelta(\@prim, $diagram);
 	}
@@ -233,11 +235,95 @@ sub allConesByDim{
 	return \@results;
 }
 
+#usage: rayToFacet(ray, diagram, sorted AoA of bounded facets)
+#the AoA must be a sorted (by decreasing length) array of the bounded faces of the newton polyhedron 
+#facet should be given as a list of vertices in the diagram, diagram should be reduced
+#returns the facet corresponding to the array
+#does this by looping through the facets, checking if the pairing of ray with all vertices in them is the same
+#if it doesn't match any of them then returns -1
+sub rayToFacet{
+	my @ray = @{shift @_};
+	my $diagram = shift;
+	my @flist = @{shift @_};
+#	my $num = 0;
+	my $correct = 1;
+	my $num = computeN(\@ray, $diagram);
+	for my $f (@flist){
+		$correct = 1;
+		#$num = dotProduct(\@ray, $diagram->[$f->[0]]);
+		for my $i (0..(scalar(@{$f}) - 1)){
+			if ($num != dotProduct(\@ray, $diagram->[$f->[$i]])){
+				$correct = 0;
+				last;
+			}
+		}
+		if ($correct == 1){
+			return $f;
+		}
+
+	}
+	return -1;
+}
+
+#usage: boundedPart(face, diagram)
+#returns the maximal bounded face contained in the face
+#diagram must be reduced
+sub boundedPart{
+	my @face = @{shift @_};
+	my $diagram = shift;
+	my $num_verts = scalar(@{$diagram});
+	my @new_face;
+	for my $v (@face){
+		if ($v < $num_verts){
+			push(@new_face, $v);
+		}
+	}
+	return \@new_face;
+}
+
+#usage: boundedFaceList{$newtonPoly, $diagram}
+#returns a list of the maximal bounded faces 
+#might not be unique, but all will be on there and all will be bounded
+sub boundedFaceList{
+	my $poly = shift;
+	my $diagram = shift;
+	my @flist = @{$poly->VERTICES_IN_FACETS};
+	my @bflist = map(boundedPart($_, $diagram), @flist);
+	return \@bflist;
+}
+
+#usage:coneHash($diagram, $boundedFaceList, $dualFan)
+#returns the faces in the order of the rays
+#doesn't actually return a hash
+sub coneHash{
+	my $diagram = shift;
+	my $bfacelist = shift;
+	my @sbfacelist = sort { @$b <=> @$a } @{$bfacelist};
+	my $dualFan = shift;
+	my @rays = map(vectorToArray($_), @{$dualFan->RAYS});
+	my @faces = map(rayToFacet($_, $diagram, \@sbfacelist), @rays);
+	return \@faces;
+}
+
+#usage: coneToFace(list of bounded faces corresponding to each ray, $cone)
+#returns arref of the corresponding face
+sub coneToFace{
+	my $conehash = shift;
+	my $cone = shift;
+	if (scalar(@$cone == 1)){
+		return $conehash->[$cone->[0]];
+	}
+	my $lc = List::Compare->new(map($conehash->[$_], @{$cone}));
+	my @answer = $lc->get_intersection;
+	return \@answer;
+}
+
 #usage: findFace(cone, diagram)
 #takes a cone in the dual cone, returns the face in the newton polyhedron that it corresponds to
 #input cone as an array of spanning vertices 
 #they should actually be a non-empty cone in the dual fan
 #returns the indices of the vertices
+#doesn't work
 sub findFace{
 	my @cone = @{shift @_};
 	my $diagram = shift;
@@ -270,7 +356,11 @@ sub findFace{
 sub localZetaFunction{
 	my $diagram = shift;
 	my $dim = scalar(@{$diagram->[0]});
-	my $fan = dualFan($diagram);
+	my $poly = newtonPolyhedron($diagram);
+	my $bflist = boundedFaceList($poly, $diagram);
+	my $fan = fan::normal_fan($poly);
+	my $conehash = coneHash($diagram, $bflist, $fan);
+	#pArrArr $conehash;
 	my $zeta = new UniPolynomial("0");
 	my @rays = @{$fan->RAYS};
 	my @cones = @{allConesByDim($fan)};
@@ -281,7 +371,10 @@ sub localZetaFunction{
 	for my $cdim (0..($dim - 1)){
 		for my $cone (@{$cones[$cdim]}){
 			my @theserays = map(\@{$rays[$_]}, @{$cone});
-			my $face = findFace(\@theserays, $diagram);
+			my $face = coneToFace($conehash, \@{$cone});
+			pArr $cone;
+			pArr $face;
+			print "\n";
 			my $num = scalar(@{$face});
 			#non-compact faces
 			if ((scalar(@{$face}))!= ($dim - $cdim)){
