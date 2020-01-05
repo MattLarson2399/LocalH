@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Jason Schuchardt and Matt Larson
-#Last updated: 12/05/2019
+#Last updated: 12/31/2019
 
 #contains various useful scripts
 #does not have specific things designed to test specific conjectures
@@ -4800,7 +4800,7 @@ sub refinedTest{
 }
 
 
-#usage: allBigFaces($diagram, $size)
+#usage: allBigFaces($subdiv, $size)
 #generates all faces that have at least $size vertices
 sub allBigFaces{
 	my $subdiv = shift;

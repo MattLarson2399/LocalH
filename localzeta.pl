@@ -39,7 +39,8 @@ sub multiplicityArray{
 		$gcd = 0;
 	}
 	else{
-		$gcd = new Integer abs((det($a)->list)[0]);
+		#adds 0.1 to deal with numerical imprecision
+		$gcd = new Integer (abs(($d->list)[0]) + 0.1);
 	}
 	for my $sub(@minors){
 		@matrixAoa = ();
@@ -53,10 +54,10 @@ sub multiplicityArray{
 		$a = pdl[\@matrixAoa];
 		my $d = det($a);
 		if ($d == 0){
-			$gcd = 0;
+			next;
 		}
 		else{
-			my $toint = new Integer(abs((det($a)->list)[0]));
+			my $toint = new Integer(abs((det($a)->list)[0]) + 0.1);
 			$gcd = gcd($gcd, $toint);
 		}
 		if ($gcd == 1){
@@ -155,7 +156,6 @@ sub jDelta{
 		my $contrib = new UniPolynomial("$n*x + $v");
 		$answer = $answer/$contrib
 	}
-	#print $answer, "\n";
 	return $answer;
 }
 
@@ -172,8 +172,8 @@ sub normalizedVolume{
 #usage: subdivideCone(arref of vertices)
 #returns a subdivision of the cone by the convex hull of the vertices 
 sub subdivideCone{
-	my $rays = shift;
-	my $cone = new Cone(RAYS=>$rays);
+	my @rays = @{shift @_};
+	my $cone = new Cone(RAYS=>\@rays);
 	my $t = $cone->TRIANGULATION;
 	my $vectorsubdiv = $t->FACETS;
 	my @subdiv = map(vectorToArray($_), @{$vectorsubdiv});
@@ -189,7 +189,6 @@ sub totalContribution{
 	my $answer = new UniPolynomial("0");
 	for my $tri (@{$primitive}){
 		my @subdividedrays = map($rays->[$_], @{$tri});
-		#pArrArr(\@subdividedrays);
 		my @prim = map(changeToPrimitive($_), @subdividedrays);
 		$answer = $answer + jDelta(\@prim, $diagram);
 	}
@@ -245,12 +244,10 @@ sub rayToFacet{
 	my @ray = @{shift @_};
 	my $diagram = shift;
 	my @flist = @{shift @_};
-#	my $num = 0;
 	my $correct = 1;
 	my $num = computeN(\@ray, $diagram);
 	for my $f (@flist){
 		$correct = 1;
-		#$num = dotProduct(\@ray, $diagram->[$f->[0]]);
 		for my $i (0..(scalar(@{$f}) - 1)){
 			if ($num != dotProduct(\@ray, $diagram->[$f->[$i]])){
 				$correct = 0;
@@ -281,29 +278,59 @@ sub boundedPart{
 	return \@new_face;
 }
 
-#usage: boundedFaceList{$newtonPoly, $diagram}
-#returns a list of the maximal bounded faces 
-#might not be unique, but all will be on there and all will be bounded
-sub boundedFaceList{
-	my $poly = shift;
+#usage: isBounded($face, $diagram)
+#returns 1 if the face is bounded, 0 if it is not
+sub isBounded{
+	my @face = @{shift @_};
 	my $diagram = shift;
-	my @flist = @{$poly->VERTICES_IN_FACETS};
-	my @bflist = map(boundedPart($_, $diagram), @flist);
-	return \@bflist;
+	my $num_verts = scalar(@{$diagram});
+	for my $v (@face){
+		if ($v >= $num_verts){
+			return 0;
+		}
+	}
+	return 1;
 }
 
-#usage:coneHash($diagram, $boundedFaceList, $dualFan)
+#usage: facetsList{$newtonPoly}
+#returns an AoA of the facets, 
+sub facetList{
+	my $poly = shift;
+	my @flist = @{$poly->VERTICES_IN_FACETS};
+	my @result = map(vectorToArray($_), @flist);
+	return \@result;
+}
+
+#usage:coneHash($diagram, $faceList, $dualFan)
 #returns the faces in the order of the rays
 #doesn't actually return a hash
-sub coneHash{
+#doesn't work
+sub badConeHash{
 	my $diagram = shift;
-	my $bfacelist = shift;
-	my @sbfacelist = sort { @$b <=> @$a } @{$bfacelist};
+	my $facelist = shift;
 	my $dualFan = shift;
 	my @rays = map(vectorToArray($_), @{$dualFan->RAYS});
-	my @faces = map(rayToFacet($_, $diagram, \@sbfacelist), @rays);
+	my @faces = map(rayToFacet($_, $diagram, $facelist), @rays);
 	return \@faces;
 }
+
+#usage: coneHash($facetlist, $diagram)
+#diagram must be reduced
+#creates a ray - to - facet correspondence by taking the facets of the newton polyhedron, removing the far face
+sub coneHash{
+	my $flist = shift;
+	my $diagram = shift;
+	my $num_verts = scalar(@{$diagram});
+	my @good;
+	for my $f (@{$flist}){
+		if ($f->[0] < $num_verts){
+			push(@good, $f)
+		}
+	}
+	return \@good;
+}
+
+
 
 #usage: coneToFace(list of bounded faces corresponding to each ray, $cone)
 #returns arref of the corresponding face
@@ -353,18 +380,18 @@ sub findFace{
 #usage: localZetaFunction($diagram)
 #computes the local zeta function
 #for now only works for simplicial, because otherwise I need to do something more intelligent to compute the dim of a face
+#diagram must be reduced
 sub localZetaFunction{
 	my $diagram = shift;
 	my $dim = scalar(@{$diagram->[0]});
 	my $poly = newtonPolyhedron($diagram);
-	my $bflist = boundedFaceList($poly, $diagram);
+	my $facetList = facetList($poly, $diagram);
 	my $fan = fan::normal_fan($poly);
-	my $conehash = coneHash($diagram, $bflist, $fan);
-	#pArrArr $conehash;
+	my $conehash = coneHash($facetList, $diagram);
+
 	my $zeta = new UniPolynomial("0");
 	my @rays = @{$fan->RAYS};
 	my @cones = @{allConesByDim($fan)};
-	#my @allcones = @{allCones($fan)};			
 	my $factor = new UniPolynomial "x/(x + 1)";
 	#cdim + 1 = dimension of cone
 	#dimension of facet = dim - cdim - 1
@@ -372,14 +399,13 @@ sub localZetaFunction{
 		for my $cone (@{$cones[$cdim]}){
 			my @theserays = map(\@{$rays[$_]}, @{$cone});
 			my $face = coneToFace($conehash, \@{$cone});
-			pArr $cone;
-			pArr $face;
-			print "\n";
-			my $num = scalar(@{$face});
-			#non-compact faces
-			if ((scalar(@{$face}))!= ($dim - $cdim)){
+			#cones corresponding to non-compact faces
+
+			if (isBounded($face, $diagram) == 0){
 				next;
 			}
+			my $num = scalar(@{$face});
+
 			if ($num == 1){
 				$zeta = $zeta + totalContribution(\@theserays, $diagram);
 			}
@@ -400,7 +426,8 @@ sub localZetaFunction{
 #returns 0 if it is not a pole
 sub isPole{
 	my $rational = shift;
-	my $point = shift;
+	my $p = shift;
+	my $point = new Rational($p);
 	my $denom = denominator($rational);
 	my $ans = $denom->evaluate($point);
 	if (abs($ans) < 0.00000001){
@@ -408,6 +435,82 @@ sub isPole{
 	}
 	return 0;
 }
+
+#usage: allContributingFacets($diagram, $list of facets, $number)
+#returns an array with a list of all facets that contribute that number
+#diagram must be reduced
+#checks if it is within 10^{-5}
+sub allContributingFacets{
+	my $diagram = shift;
+	my $flist = shift;
+	my $num = shift;
+	my @facets;
+	for my $f(@{$flist}){
+		if ((abs(candidatePole($diagram, \@{$f}) - $num) < 0.00001)){
+			push(@facets, \@{$f});
+		}
+	}
+	return \@facets; 
+}
+
+#usage:checkAllForCounterexample($diagram)
+#diagramn must be reduced
+#checks every pole if it gives a counterexample
+#checks if there is a facet with essential face contributing
+sub checkAllForCounterexample{
+	my $diagram = shift;
+	my $subdiv = nonSimpDiagramToSimp($diagram);
+	my $flist = $subdiv->FACETS;
+	my $list = allCandidatePoles($diagram);
+	my $localzeta = localZetaFunction($diagram);
+	my $good = 0;
+	for my $num (@{$list}){
+		$good = 0;
+		if (isPole($localzeta, $num)){
+			my $facets = allContributingFacets($diagram, $flist, $num);
+			for my $f (@{$facets}){
+				if (computeMultiplicity($diagram, $f) > 0){
+					$good = 1;
+					last;
+				}
+			}
+			if ($good == 0){
+				print "Found counterexample";
+			return 1;
+			}
+		}
+
+	}
+	return 0;	
+}
+
+#usage: quicklyTestDiagram($diagram)
+#diagram need not be reduced
+#tests topological monodromy conjecture
+sub quicklyTestDiagram{
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
