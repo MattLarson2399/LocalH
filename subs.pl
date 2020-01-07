@@ -3692,7 +3692,7 @@ sub generateABunchOfDiagrams{
 	my $iter = shift;
 	my @diagrams = ();
 	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 10000, 20, 50);
+		my $diagram = sumRND($dim, 1000, 50, 20);
 		my $subdiv = diagramToSubdiv($diagram);
 		if ($subdiv == 1){
 			next;

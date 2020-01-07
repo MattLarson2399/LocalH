@@ -394,16 +394,16 @@ sub localZetaFunction{
 	my @cones = @{allConesByDim($fan)};
 	my $factor = new UniPolynomial "x/(x + 1)";
 	#cdim + 1 = dimension of cone
-	#dimension of facet = dim - cdim - 1
+	#dimension of face = dim - cdim - 1
 	for my $cdim (0..($dim - 1)){
 		for my $cone (@{$cones[$cdim]}){
 			my @theserays = map(\@{$rays[$_]}, @{$cone});
 			my $face = coneToFace($conehash, \@{$cone});
 			#cones corresponding to non-compact faces
-
 			if (isBounded($face, $diagram) == 0){
 				next;
 			}
+
 			my $num = scalar(@{$face});
 
 			if ($num == 1){
@@ -411,9 +411,9 @@ sub localZetaFunction{
 			}
 			if ($num > 1){
 				my $contrib = totalContribution(\@theserays, $diagram);
-				my $dim = scalar(@{$face}) - 1;
+				my $fdim = $dim - $cdim - 1;
 				my @verts = map($diagram->[$_], @{$face});
-				my $coef = powMinusOne($dim)*normalizedVolume(\@verts);
+				my $coef = powMinusOne($fdim)*normalizedVolume(\@verts);
 				$zeta = $zeta + $factor*$coef*$contrib;
 			}
 		}
@@ -430,7 +430,7 @@ sub isPole{
 	my $point = new Rational($p);
 	my $denom = denominator($rational);
 	my $ans = $denom->evaluate($point);
-	if (abs($ans) < 0.00000001){
+	if ($ans == 0){
 		return 1;
 	}
 	return 0;
@@ -487,11 +487,120 @@ sub checkAllForCounterexample{
 #usage: quicklyTestDiagram($diagram)
 #diagram need not be reduced
 #tests topological monodromy conjecture
+#does not use any results about when B_1 facets don't give rise to candidate poles
+#checks for each pole if there is a B_1 facet that contributes that eigenvalue, there could be other facets
 sub quicklyTestDiagram{
+	my $diagram = shift;
+	$diagram = completelyReduceDiagram($diagram);
+	my $subdiv = nonSimpDiagramToSimp($diagram);
+	my $perturbed = diagramToPerturbedSubdiv($diagram);
+	#finds the universally B_1 facets and B_1 facet
+	my @tocheck;
+	my @flist = @{$subdiv->FACETS};
+	for my $f (@flist){
+		my @facet = @{$f};
+		if (isB1Facet($diagram, \@facet)){
+			push(@tocheck, \@facet);
+			next;
+		}
+		if (noGoodTriangulation($diagram, \@facet)){
+			push(@tocheck, \@facet);
+		}
+
+	}
+	if (scalar(@tocheck) == 0){
+		return 0;
+	}
+	my $localzeta = localZetaFunction($diagram);
+	#creates list of real poles that are contribute by (universally) B_1 facets
+	my @allcandidates;
+	for my $f (@tocheck){
+		my @f = @{$f};
+		my $tri = findTriangulated($diagram, $perturbed, \@f)->[0];
+		push(@allcandidates, candidatePole($diagram, $tri));
+	}
+	#checks if these candidates are actually poles
+	my @poleslist;
+	for my $pole (@allcandidates){
+		if (canonicalMod1($pole) < 0.0000001){
+			next;
+		}
+		if (abs(canonicalMod1($pole) - 1) < 0.0000001){
+			next;
+		}
+		if (isPole($localzeta, $pole)){
+			push(@poleslist, $pole);
+		}
+	}
+	if(scalar(@poleslist) == 0){
+		return 0;
+	}
+	#loops through all facets, checks if their candidate pole is one of the poles 
+	#if it is, computes contribution 
+	#if contribution is positive, removes corresponding poles
+	pArr(\@poleslist);
+	for my $f (@flist){
+		if (scalar(@{poleslist}) == 0){
+			return 0;
+		}
+		my @facet = @{$f};
+
+		my $tri = findTriangulated($diagram, $perturbed, \@facet)->[0];
+		my $num = exactCandidatePole($diagram, $tri);
+		my @matching_indices;
+		for my $i (0..(scalar(@{poleslist}) - 1)){
+			if (abs($num - $poleslist[$i]) < 0.000001){
+				push(@matching_indices, $i);
+			}
+		}
+		if (computeMultiplicity($diagram, \@facet) == 0){
+			next;
+		}
+		#removes the matching indices
+		my $total = scalar(@matching_indices);
+		for my $i (0..($total - 1)){
+			splice(@poleslist, ($total - 1 - $i), 1);
+		}
+		pArr(\@poleslist);
+	}
+	if (scalar(@poleslist) == 0){
+		return 0;
+	}
+	print "Found counterexample";
+	return 1;
 
 }
 
-
+#usage: exactCandidatePole($diagram, $facet)
+#diagram should be completely reduced 
+#facet should be an actual facet 
+#returns the candidate pole as a rational number
+sub exactCandidatePole{
+	my $diagram = shift;
+	my $poly = newtonPolyhedron($diagram);
+	my $facet = shift;
+	my @facets = @{$p->VERTICES_IN_FACETS};
+	for my $index (0..(scalar(@facets) - 1)){
+		my $f = $facets[$index];
+		for my $i (0..(scalar(@{$facet}) - 1)){
+			if ($facet->[$i] != $f->[$i]){
+				last;
+			}
+			if ($i == (scalar(@{$facet}) - 1)){
+				my @normal = @{$poly->FACETS->[$index]};
+				shift(@normal);
+				my $normalized = new Vector(\@normal);
+				my $nu = sumArray(\@{$normalized});
+				my $N = 0;
+				for my $j (0..(scalar(@normal) - 1)){
+					$N += ($diagram->[$facet->[0]]->[$j])*($normalized->[$j]);
+				}
+				my $answer = new Rational(-$nu/$N);
+				return $answer;
+			}
+		}
+	}
+}
 
 
 
