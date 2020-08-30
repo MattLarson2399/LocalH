@@ -1,17 +1,18 @@
 #!/usr/bin/perl
 #Contributors: Matt Larson
-#Last updated: 12/05/2019
+#Last updated: 08/30/2020
 
 #computes the topological local zeta function associated to a Newton polyhedron
 
 use strict;
 use warnings;
 use application "polytope";
-use PDL;
 use Algorithm::Combinatorics "subsets";
 #use Math::Matrix;
 
 script("/Users/matthew/Desktop/Local_Zeta_Function/code/subs.pl");
+
+
 
 #usage: multiplicityArray(AoA)
 #computes the multiplicity of an array of r integer vectors
@@ -21,52 +22,10 @@ script("/Users/matthew/Desktop/Local_Zeta_Function/code/subs.pl");
 sub multiplicityArray{
 	my @input = @{shift @_};
 	my @vecs = map(latticePointToArray($_), @input);
-	my $num = scalar(@vecs);
-	my @minors = subsets([0..scalar(@{$vecs[0]})-1], $num);
-	#constructs matrix 
-	my @matrixAoa = ();
-	for my $i(0..($num - 1)){
-		my @row = ();
-		for my $j (0..($num - 1)){
-			push(@row, $vecs[$i]->[$j]);
-		}
-		push(@matrixAoa, \@row);
-	}
-	my $a = pdl[\@matrixAoa];
-	my $d = det($a);
-	my $gcd;
-	if ($d == 0){
-		$gcd = 0;
-	}
-	else{
-		#adds 0.1 to deal with numerical imprecision
-		$gcd = new Integer (abs(($d->list)[0]) + 0.1);
-	}
-	for my $sub(@minors){
-		@matrixAoa = ();
-		for my $i(0..($num - 1)){
-			my @row = ();
-			for my $j (0..($num - 1)){
-				push(@row, $vecs[$i]->[$sub->[$j]]);
-			}
-			push(@matrixAoa, \@row);
-		}
-		$a = pdl[\@matrixAoa];
-		my $d = det($a);
-		if ($d == 0){
-			next;
-		}
-		else{
-			my $toint = new Integer(abs((det($a)->list)[0]) + 0.1);
-			$gcd = gcd($gcd, $toint);
-		}
-		if ($gcd == 1){
-			last;
-		}
-	}
-	return $gcd;
+	my $mat = new Matrix<Integer>(\@vecs);
+	my $v = pluecker($mat);
+	return gcd($v);
 }
-
 #usage: newtonPolyhedron($diagram)
 #diagram does not need to be reduced
 #outputs the newton polyhedron as a polyhedron
@@ -378,7 +337,7 @@ sub findFace{
 
 
 #usage: localZetaFunction($diagram)
-#computes the local zeta function
+#computes the topological local zeta function
 #for now only works for simplicial, because otherwise I need to do something more intelligent to compute the dim of a face
 #diagram must be reduced
 sub localZetaFunction{
@@ -395,6 +354,7 @@ sub localZetaFunction{
 	my $factor = new UniPolynomial "x/(x + 1)";
 	#cdim + 1 = dimension of cone
 	#dimension of face = dim - cdim - 1
+	my $tzeta = new UniPolynomial("0");
 	for my $cdim (0..($dim - 1)){
 		for my $cone (@{$cones[$cdim]}){
 			my @theserays = map(\@{$rays[$_]}, @{$cone});
@@ -408,12 +368,31 @@ sub localZetaFunction{
 
 			if ($num == 1){
 				$zeta = $zeta + totalContribution(\@theserays, $diagram);
+				#my $t = totalContribution(\@theserays, $diagram);
+				#if (isPole($t, -184/143)){
+				#	pArr $face;
+				#	pArr $cone;
+				#	print $t;
+				#	print "\n";
+				#	$tzeta = $tzeta + $t;
+				#}
 			}
 			if ($num > 1){
 				my $contrib = totalContribution(\@theserays, $diagram);
 				my $fdim = $dim - $cdim - 1;
 				my @verts = map($diagram->[$_], @{$face});
 				my $coef = powMinusOne($fdim)*normalizedVolume(\@verts);
+				#if (isPole($contrib, -184/143)){
+				#	if ($num == 2 and $face->[1] == 6){
+				#		pArr $face;
+				#		pArr $cone;
+				#		print $contrib;
+				#		print "\n factor is $coef \n";
+				#		print $factor*$coef*$contrib;
+				#		print "\n";
+				#		$tzeta = $tzeta + $factor*$coef*$contrib;
+				#	}
+				#}
 				$zeta = $zeta + $factor*$coef*$contrib;
 			}
 		}
@@ -457,6 +436,7 @@ sub allContributingFacets{
 #diagramn must be reduced
 #checks every pole if it gives a counterexample
 #checks if there is a facet with essential face contributing
+#doesn't work because it doesn't use exactCandidatePole
 sub checkAllForCounterexample{
 	my $diagram = shift;
 	my $subdiv = nonSimpDiagramToSimp($diagram);
@@ -467,6 +447,7 @@ sub checkAllForCounterexample{
 	for my $num (@{$list}){
 		$good = 0;
 		if (isPole($localzeta, $num)){
+			print "checking ", $num, "\n";
 			my $facets = allContributingFacets($diagram, $flist, $num);
 			for my $f (@{$facets}){
 				if (computeMultiplicity($diagram, $f) > 0){
@@ -516,16 +497,15 @@ sub quicklyTestDiagram{
 	my @allcandidates;
 	for my $f (@tocheck){
 		my @f = @{$f};
-		my $tri = findTriangulated($diagram, $perturbed, \@f)->[0];
-		push(@allcandidates, candidatePole($diagram, $tri));
+		push(@allcandidates, exactCandidatePole($diagram, \@f));
 	}
 	#checks if these candidates are actually poles
 	my @poleslist;
 	for my $pole (@allcandidates){
-		if (canonicalMod1($pole) < 0.0000001){
+		if (rationalCanonicalMod1($pole) < 0.0000001){
 			next;
 		}
-		if (abs(canonicalMod1($pole) - 1) < 0.0000001){
+		if (abs(rationalCanonicalMod1($pole) - 1) < 0.0000001){
 			next;
 		}
 		if (isPole($localzeta, $pole)){
@@ -553,20 +533,29 @@ sub quicklyTestDiagram{
 				push(@matching_indices, $i);
 			}
 		}
+		my $total = scalar(@matching_indices);
+		if ($total == 0){
+			next;
+		}
 		if (computeMultiplicity($diagram, \@facet) == 0){
 			next;
 		}
 		#removes the matching indices
-		my $total = scalar(@matching_indices);
 		for my $i (0..($total - 1)){
-			splice(@poleslist, ($total - 1 - $i), 1);
+			splice(@poleslist, $matching_indices[$total - 1 - $i], 1);
 		}
 		pArr(\@poleslist);
 	}
 	if (scalar(@poleslist) == 0){
 		return 0;
 	}
-	print "Found counterexample";
+
+
+
+
+	print "Found counterexample!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+	print($localzeta);
+	print "\n";
 	return 1;
 
 }
@@ -579,7 +568,7 @@ sub exactCandidatePole{
 	my $diagram = shift;
 	my $poly = newtonPolyhedron($diagram);
 	my $facet = shift;
-	my @facets = @{$p->VERTICES_IN_FACETS};
+	my @facets = @{$poly->VERTICES_IN_FACETS};
 	for my $index (0..(scalar(@facets) - 1)){
 		my $f = $facets[$index];
 		for my $i (0..(scalar(@{$facet}) - 1)){
@@ -603,24 +592,364 @@ sub exactCandidatePole{
 }
 
 
+#usage: rationalCanonicalMod1(number)
+#finds a representative of the number mod 1 that is between 0 and 1
+#works for polymake types
+sub rationalCanonicalMod1{
+	my $num = shift;
+	my $v = new Vector<Rational>([$num]);
+	my $real = convert_to<Float>($v);
+	return canonicalMod1($real->[0]);
+}
+
+#usage: checkIfPoles($diagram, $array of rationals)
+#returns a 0/1 array, 1 if the corresponding rational is a pole, 0 if it is not 
+#more efficient that computing whole local zeta function hopefully
+sub checkIfPoles{
+
+}
+
+
+
+#usage:generateDiagramsForMonodromy(dimension, number of iterations)
+#returns a bunch of reduced that give triangulations
+#may return fewer diagrams because the random diagrams it generates might be non-simplicial
+#sumRND is (dim, cbound, general sum, number of vertices)
+#produces reduce diagrams!
+sub generateDiagramsForMonodromy{
+	my $dim = shift;
+	my $iter = shift;
+	my @diagrams = ();
+	for my $i (0..$iter){
+		my $diagram = sumRND($dim, 40, 10, 15);
+		my $subdiv = diagramToSubdiv($diagram);
+		if ($subdiv == 1){
+			next;
+		}
+		$diagram = removeRedundant($diagram, $subdiv);
+		push(@diagrams, $diagram);
+	}
+	return \@diagrams;
+}
+
+
+
+#usage: totalContribution(rays of a cone, fan, P)
+#returns the integral over the cone paired with P
+sub integralP{
+	my $cone = shift;
+	my $fan = shift;
+	my @allrays = @{$fan->RAYS};
+	my $P = shift;
+	my @theserays = map(\@{$rays[$_]}, @{$cone});
+	my $primitive = subdivideCone(\@theserays);
+	my $answer = new UniPolynomial("0");
+	for my $tri (@{$primitive}){
+		my @subdividedrays = map($theserays[$_], @{$tri});
+		my @prim = map(changeToPrimitive($_), @subdividedrays);
+		my $trianglecontrib = new UniPolynomial(1);
+		for my $p (@prim){
+			my $pairing = dotProduct($P, $p);
+			my $v = sumArray($p);
+			my $contrib = new UniPolynomial("$pairing*x + $v");
+			$trianglecontrib = $trianglecontrib/$contrib
+		}
+		$answer = $answer + $trianglecontrib;
+	}
+	return $answer;
+}
+
+#usage: testGeneralConjecture($diagram)
+#takes a diagram, finds all B_1 facets
+#For each cluster of B_1 facets contributing the same candidate pole, checks if the cluster is coherent 
+#if the cluster is not coherent, then it should contribute an eigenvalue
+#if all the clusters are coherent, then the pole shouldn't be a pole 
+#only works for simplicial
+#checks all clusters, not just those consisting only of B_1 facets
+#returns 2 if eigenvalue side fails, 1 if pole side, 0 if both okay
+sub testGeneralConjecture{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my @polestocheck;
+	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	for my $c (@clusters){
+		my $facets = $c;
+		my $pole = rationalCandidatePole($diagram, $facets->[0]);
+		if ($pole == -1){
+			next;
+		}
+		my $result = checkIfCoherent($diagram, $facets);
+		if ($result == 0){
+			my $essential = returnQ($diagram, 3, $facets->[0]);
+			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+				print "Contradiction to eigenvalue side with facet \n";
+				pArr($facets->[0]);
+				pArr(minCritFace($diagram, $facets->[0]));
+				return 2;
+			}
+		}
+		else{
+			push(@polestocheck, $pole);
+		}
+
+	}
+	my @allcoherent;
+	for my $pole (@polestocheck){
+		my @facets = @{allContributingCandidatePole($diagram, \@allfacets, $pole)};
+		if (checkIfCoherent($diagram, \@facets) != 0){
+			push(@allcoherent, $pole);
+		}
+	}
+	if (scalar(@allcoherent) > 0){
+		my $zeta = localZetaFunction($diagram);
+		for my $p (@allcoherent){
+			if (isPole($zeta, $p)){
+				print "Contradiction to pole side ", $p, "\n";
+				pArrArr(allContributingCandidatePole($diagram, \@allfacets, $p));
+				#pArr(minCritFace($diagram, \@{$contrib[0]}));
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+#useage: testCoherentPoleEigenvalue($diagram, c)
+#loops through clusters, checks each cluster if it is coherent, contributes a pole, and contributes an eigenvalue 
+#prints the result if the pole is fake, and the center has codimension c
+sub testCoherentPoleEigenvalue{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $c = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my @polestocheck;
+	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	my @centers = @{$centerclusters->[0]};
+	my $zeta = localZetaFunction($diagram);
+
+	for my $i (0..(scalar(@clusters) - 1)){
+		my $center = $centers[$i];
+		if (scalar(@{$center}) != $dim - $c){
+			next;
+		}
+		my $facets = $clusters[$i];
+		my $pole = rationalCandidatePole($diagram, $facets->[0]);
+		if ($pole == -1){
+			next;
+		}
+		if (isPole($zeta, $pole)){
+			next;
+		}
+		print "Center is: \n";
+		pArr($center);
+		print "Facets are: \n";
+		pArrArr($facets);
+		my $result = checkIfCoherent($diagram, $facets);
+		if ($result == 0){
+			print "Cluster is coherent \n";
+		}
+		else{
+			print "Cluster is not coherent \n";
+		}
+		my $essential = returnQ($diagram, 3, $facets->[0]);
+		if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+			print "Eigenvalue does not contribute \n";
+			
+		}
+		else{
+			print "Eigenvalue contributes \n";
+		}
+		print "Pole is fake \n";
+
+
+
+	}
+
+}
+
+sub testEigenvalueCoherent{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my @polestocheck;
+	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	for my $c (@clusters){
+		my $facets = $c;
+		my $pole = rationalCandidatePole($diagram, $facets->[0]);
+		if ($pole == -1){
+			next;
+		}
+		my $result = checkIfCoherent($diagram, $facets);
+		if ($result == 0){
+			my $essential = returnQ($diagram, 3, $facets->[0]);
+			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+				print "Contradiction to eigenvalue side with facet \n";
+				pArrArr($facets);
+				pArr(minCritFace($diagram, $facets->[0]));
+				return 2;
+			}
+		}
+
+	}
+	return 0;
+}
+
+
+#usage; testELTCoherentFake($diagram)
+#checks every cluster of facets
+#looks for facets that are [ELT] coherent but have a real pole 
+#fake apices with a real pole 
+#unexpected fake poles 
+#counterexamples to the eigenvalue side 
+#doesn't work well if multiple clusters contribute the same pole 
+#returns 1 if the pole is unexpectly fake or the eigenvalue unexpectly fails to contribute
+#returns 2 if the pole is unexpectly real
+#incorporates the cd1 conjecture 
+sub testELTCoherentFake{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	my @centers = @{$centerclusters->[0]};
+	my $zeta = localZetaFunction($diagram);
+	my $bad = 0;
+	for my $i (0..(scalar(@clusters) - 1)){
+		my $center = $centers[$i];
+
+		my $facets = $clusters[$i];
+		my $pole = rationalCandidatePole($diagram, $facets->[0]);
+		if ($pole == -1){
+			next;
+		}
+		#checks for multiple clusters 
+		my $allcontributing = allContributingFacets($diagram, \@allfacets, $pole);
+		if (scalar(@{$allcontributing}) > scalar(@{$facets})){
+			next;
+		}
+		#does the cd 1 case 
+		if (scalar(@{$center}) == ($dim - 1)){
+			my $yesorno = isPole($zeta, $pole);
+			testCD1Conjecture($diagram, $center, $facets, $yesorno, $subdiv);
+			next;
+		}
+
+		my $isELT = isELTCoherent($diagram, $facets);
+		my $hasapex = hasFakeUniqueApex($diagram, [$center, $facets]);
+		if (($isELT == 0) and (scalar(@{$hasapex}) == 0)){
+			#in this case pole should be real, eigenvalue should be real
+			if (not isPole($zeta, $pole)){
+				pArrArr($facets);
+				print "Pole is fake \n";
+				$bad = 1;
+			}
+			my $essential = returnQ($diagram, 3, $facets->[0]);
+			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+				pArrArr($facets);
+				print "Eigenvalue does not contribute \n";
+				$bad = 1;
+			}
+
+		}
+
+		else{
+			#pole should be fake, eigenvalue couold be real or fake
+			if (isPole($zeta, $pole)){
+				if (not ($isELT == 0)){
+					pArrArr($facets);
+					print "Counterexample to [ELT] \n";
+					$bad = 2;
+				}
+				if (not scalar(@{$hasapex}) == 0){
+					pArrArr($facets);
+					print "Real pole even though fake apex \n";
+					$bad = 2;
+				}
+			}
+		}
 
 
 
 
+	}
+	if ($bad == 1){
+		return 1;
+	}
+	if ($bad == 2){
+		return 2;
+	}
+	return 0;
+
+}
+
+#usage: testOperativeConjecture($diagram)
+#tests the conjecture that the existence of an operative labeling determines if a pole is fake
+#doesn't work well if multiple clusters contribute the same pole 
+
+sub testOperativeConjecture{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	my @centers = @{$centerclusters->[0]};
+	my $zeta = localZetaFunction($diagram);
+	my $bad = 0;
+	for my $i (0..(scalar(@clusters) - 1)){
+		my $center = $centers[$i];
+
+		my $facets = $clusters[$i];
+		my $pole = rationalCandidatePole($diagram, $facets->[0]);
+		if ($pole == -1){
+			next;
+		}
+		#checks for multiple clusters 
+		my $allcontributing = allContributingFacets($diagram, \@allfacets, $pole);
+		if (scalar(@{$allcontributing}) > scalar(@{$facets})){
+			next;
+		}
+		#eigenvalue should be real in the following case
+		if (checkForOperative($diagram, $subdiv, $center) == 0){
+			if (not isPole($zeta, $pole)){
+				pArrArr($facets);
+				print "Pole is fake \n";
+				$bad = 1;
+			}
+			my $essential = returnQ($diagram, 3, $facets->[0]);
+			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+				pArrArr($facets);
+				print "Eigenvalue does not contribute, operative conjecture is wrong \n";
+				$bad = 1;
+			}
+
+		}
+		else{
+			#pole should be fake, eigenvalue couold be real or fake
+			if (isPole($zeta, $pole)){
+				pArrArr($facets);
+				print "Pole should be fake but is not \n";
+				$bad = 2;
+			}			
+		}
+	}
+	if ($bad == 1){
+		return 1;
+	}
+	if ($bad == 2){
+		return 2;
+	}
+	return 0;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}
 

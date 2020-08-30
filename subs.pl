@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Jason Schuchardt and Matt Larson
-#Last updated: 12/31/2019
+#Last updated: 08/30/2020
 
 #contains various useful scripts
 #does not have specific things designed to test specific conjectures
@@ -11,6 +11,7 @@ use warnings;
 use Benchmark qw(:all);
 use application "polytope";
 use List::Util 'shuffle';
+use List::Util qw(reduce);
 use List::Compare;
 use Algorithm::Combinatorics "subsets";
 use PDL;
@@ -18,6 +19,18 @@ use PDL::Matrix;
 use PDL::MatrixOps;
 #use Math::Matrix;
 
+
+#usage: cartesian_product(AoA)
+#returns all pairs 
+#not: don't input a reference 
+sub cartesian_product {
+	reduce {
+    	[ map {
+    		my $item = $_;
+    		map [ @$_, $item ], @$a
+    	} @$b ]
+	} [[]], @_
+}
 
 
 #usage: round(number)
@@ -760,7 +773,7 @@ sub reindexIndices{
 
 
 #usage: isUnimodal(arref);
-#checks if a SYMMETRIC array is 
+#checks if a SYMMETRIC array is unimodal
 #returns 0 if it is not unimodal
 sub isUnimodal{
 	my $aref = shift;
@@ -2975,6 +2988,7 @@ sub ellCoefficient{
 
 #checkFacetConjecture($subdiv)
 #checks that conjecture that if a facet F can be decomposed into a join of two internal faces
+#looks for full parition with P = \emptyset
 #then ell_i is nonzero
 sub checkFacetConjecture{
 	my $subdiv = shift;
@@ -3692,7 +3706,7 @@ sub generateABunchOfDiagrams{
 	my $iter = shift;
 	my @diagrams = ();
 	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 1000, 50, 20);
+		my $diagram = sumRND($dim, 50, 15, 6);
 		my $subdiv = diagramToSubdiv($diagram);
 		if ($subdiv == 1){
 			next;
@@ -4715,6 +4729,82 @@ sub lookForGoodType{
 	return removeDuplicates(\@good);
 }
 
+#usage: lookForPotentialCounterexample($diagram, $subdiv)
+#checks if the essential face of any B_1 facet is a potential counterexample 
+#i.e. checks if |G_1| and |G_2| are at least 3, P is not of size 1 with i_1 = 2
+#could potentially modify to require P to have size at least 1 instead, as we don't know some of these cases 
+#returns AoA of faces 
+#returns 0 if there are none
+sub lookForPotentialCounterexample{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my @B1s = @{returnB1Facets($diagram, $subdiv)};
+	my @good;
+	for my $facet (@B1s){
+		my $crit = minCritFace($diagram, $facet);
+		my $type = faceType($diagram, $crit);
+		if ($type == 0){
+			next;
+		}
+		if ((scalar(@{$type}) == 1) and ($type->[0] == 2)){
+			next;
+		}
+		if ($type->[scalar(@{$type}) - 1] == 1){
+			next;
+		}
+		push(@good, $crit);
+	}
+	@good = @{removeDuplicates(\@good)};
+
+	for my $face (@good){
+		my @facetype = @{faceType($diagram, $face)};
+		my $r = scalar(@facetype);
+		my @facet = @{findFacet($subdiv, $face)};
+		my $Q = returnQ($diagram, 3, \@facet);
+		my $E = scalar(@{$Q});
+		my $tildeE = scalar(@{$face});
+		my $posverts = posNegDecomp($diagram, \@facet)->[0];
+		my $G_1r = scalar(@{$posverts});
+		pArr(\@facetype);
+		print ($G_1r - $r);
+		if ($G_1r - $r < 3){
+			next;
+		}
+		my $G_2r = $tildeE - $E - $G_1r + $r;
+		if ($G_2r - $r < 3){
+			next;
+		}
+		pArrArr($diagram);
+		pArr($face);
+		pArr(\@facetype);
+		my $local = relativeLocalH($subdiv, $Q);
+		if (($local->[$G_1r] == 0) or ($local->[$G_2r] == 0)){
+			print "Found counterexample";
+			return 0;
+		}
+	}
+	return 1;
+
+}
+
+#usage: completeCheck(dim, number)
+#checks Alan's conjecture in dimension dim number times
+sub completeCheck{
+	my $dim = shift;
+	my $num = shift;
+	for my $i (0..($num - 1)){
+		my $diagram = sumRND($dim, 5000, 20, 50);
+		my $sub = diagramToSubdiv($diagram);
+		if ($sub == 1){
+			next;
+		}
+		$diagram = removeRedundant($diagram, $sub);
+		print "\n \nTesting $i \n";
+		lookForPotentialCounterexample($diagram, $sub);
+	}
+}
+
+
 #usage: findFacet($simplicial complex, $face)
 #finds a facet containing that face
 #if it isn't a face, returns 0
@@ -4826,6 +4916,32 @@ sub allBigFaces{
 	return \@allfaces;
 
 }
+
+#usage: allFacesSize($subdiv, $size)
+#generates all faces that have exactly $size vertices
+sub allFacesSize{
+	my $subdiv = shift;
+	my $size = shift;
+	my @fs = @{$subdiv->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	#use hash to find unique faces
+	my %hash;
+	my @allfaces;
+	for my $facet (@fs){
+		my @faces = subsets($facet, $size);
+		for my $face (@faces){
+			my $str = "@{$face}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@allfaces, $face);
+			}
+		}
+	}
+	return \@allfaces;
+
+}
+
+
 
 #usage: testGeneralizedConjectureOne$diagram, face)
 #checks if there is a tripartion of the face into stuff satisfying the conjecture where P is a vertex
@@ -4960,7 +5076,40 @@ sub testGeneralizedConjectureTwo{
 	return 0;
 }
 
-
+#use: hasFullParition($subdiv)
+#checks if any facet has a full partition with P empty
+#returns 1 if it does, 0 if it does not
+#works with E = emptyset
+sub hasFullPartitionPEmpty{
+	my $subdiv = shift;
+	my @face = ();
+	my @facets = @{$subdiv->FACETS};
+	for my $facet (@facets){
+		my @facet = @{$facet};
+		if (not is_subset(\@facet, \@face)){
+			next;
+		}
+		if (pyramidOverFace($subdiv, $facet, \@face)){
+			next;
+		}
+		my $lc = List::Compare->new(\@facet, \@face);
+		my @comp = $lc->get_unique;
+		for my $k (0..int(scalar(@comp)/2)){
+			my @divisions = subsets(\@comp, $k);
+			for my $split (@divisions){
+				if (scalar(@{carrier($subdiv, union($split, \@face))}) > 0){
+					next;
+				}
+				my $list = List::Compare->new(\@comp, $split);
+				my @other = $list->get_unique;
+				if (scalar(@{carrier($subdiv, union(\@face, \@other))}) == 0){
+					return 1;
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 
 #usage: testConverse(subdiv)
@@ -4973,6 +5122,9 @@ sub testGeneralizedConjectureTwo{
 #works in up to dim 4, might miss a witness with |P| = 3 in dim 5
 sub testConverse{
 	my $subdiv = shift;
+	if (hasFullPartitionPEmpty($subdiv)){
+		return 0;
+	}
 	my $local = relativeLocalH($subdiv, []);
 	my $iszero = sumArray($local);
 	my $facestocheck = allBigFaces($subdiv, 2);
@@ -4986,9 +5138,11 @@ sub testConverse{
 	}
 	for my $face (@{$facestocheck}){
 		if ((testGeneralizedConjectureTwo($subdiv, $face) != 0) or (testGeneralizedConjectureOne($subdiv, $face) != 0)){
-				return 0;
+			pArr($face);
+			return 0;
 		}
 	}
+	pArr($local);
 	return 1;
 
 }
@@ -4999,54 +5153,1154 @@ sub testConverse{
 
 
 
+#usage: finelyTestAlanConjecture($subdiv, face)
+#checks if there is a tripartion of the face into stuff satisfying the conjecture where P has size 2
+#works in case E = emptyset
+#and G_1, G_2 both have size at least 3
+#returns 0 if there is not
+#returns the tripation if there is
+#should have no interior vertices
+sub finelyTestAlanConjecture{
+	my $subdiv = shift;
+	my @face = @{shift @_};
+	my $fsize = scalar(@face);
+	if ($fsize < 8){
+		return 0;
+	}
+	if (scalar(@{carrier($subdiv, \@face)}) > 0){
+		return 0;
+	}
+	#tests each vertex one by one
+	for my $v (@face){
+		#generates the rest of the face
+		my @other;
+		for my $w (@face){
+			if ($w != $v){
+				push(@other, $w);
+			}
+		}
+
+		#checks the carrier condition
+		if(scalar(@{carrier($subdiv, \@other)}) < 2){
+			next;
+		}
+		for my $w(@face){
+			if ($w == $v){
+				next;
+			}
+			my @remains;
+			for my $z (@face){
+				if ($z != $w){
+					push(@remains, $z);
+				}
+			}
+			#checks the carrier condition
+			if(scalar(@{carrier($subdiv, \@remains)}) < 2){
+				next;
+			}
+			#now we have two vertices, $v and $w$
+			#P = {$v, $w}, satisfies this condition
+
+			#now gets remaining vertices
+			my @verts;
+			for my $z (@face){
+				if (($z != $v) and ($z != $w)){
+					push(@verts, $z);
+				}
+			}
+			#now looks at paritions of the vertices
+			for my $size (3..($fsize - 5)){
+				my @totest = subsets(\@verts, $size);
+				for my $G (@totest){
+					#if (scalar(@{$G}) < 3){
+					#	next;
+					#}
+					#if ($fsize - 2 - scalar(@{$G}) < 3){
+					#	next;
+					#}
+					push(@{$G}, $v);
+					push(@{$G}, $w);
+					if (scalar(@{carrier($subdiv, $G)}) > 0){
+						next;
+					}
+
+					#checks if the complement of $G with interior is also interior
+					my $lc = List::Compare->new($G, \@face);
+					my @others = $lc->get_complement;
+					push(@others, $v);
+					push(@others, $w);
+					if (scalar(@{carrier($subdiv, \@others)}) == 0){
+						my $coef1 = scalar(@{$G});
+						my $coef2 = scalar(@others);
+						return [$coef1, $coef2];
+					}
+				}
+			}
 
 
+		}
+
+	}
+	return 0;
+}
 
 
+#usage: checkSubdivision($subdiv, $size)
+#subdiv should have local h 0
+#checks if any of the faces of size $size satisfying the hypothesis of Alan's conjecture 
+sub checkSubdivision{
+	my $subdiv = shift;
+	my $size = shift;
+	my $faces = allFacesSize($subdiv, $size);
+	for my $f (@{$faces}){
+		if (finelyTestAlanConjecture($subdiv, $f) != 0){
+			print "Found counterexample \n";
+			pArr($f);
+		}
+	}
+}
+
+#usage: finelyTestRelativeConjecture($subdiv, $face, $E)
+#face should be disjoint from $E 
+#checks if there is a tripation of $face = G_1 \cup G_2 \cup P, with size of P = 2
+#P satisfying the codim condition 
+#E \cup G_1 \cup P, E \cup G_2 \cup P interior 
+#looks for full parition with size of P = 2
+#returns 0 if there is no such decomposition 
+#returns 1 if there is a decomposition 
+sub finelyTestRelativeConjecture{
+	my $subdiv = shift;
+	my @face = @{shift @_};
+	my @E = @{shift @_};
+	my @both = @{union(\@face, \@E)};
+	my $fsize = scalar(@face);
+	if ($fsize < 8){
+		return 0;
+	}
+	#tests each vertex one by one
+	for my $v (@face){
+		#generates the rest of the face
+		my @other;
+		for my $w (@both){
+			if ($w != $v){
+				push(@other, $w);
+			}
+		}
+
+		#checks the carrier condition
+		if(scalar(@{carrier($subdiv, \@other)}) < 2){
+			next;
+		}
+		for my $w(@face){
+			if ($w == $v){
+				next;
+			}
+			my @remains;
+			for my $z (@both){
+				if ($z != $w){
+					push(@remains, $z);
+				}
+			}
+			#checks the carrier condition
+			if(scalar(@{carrier($subdiv, \@remains)}) < 2){
+				next;
+			}
+			#now we have two vertices, $v and $w$
+			#P = {$v, $w}, satisfies this condition
+
+			#now gets remaining vertices
+			my @verts;
+			for my $z (@face){
+				if (($z != $v) and ($z != $w)){
+					push(@verts, $z);
+				}
+			}
+			#now looks at paritions of the vertices
+			for my $size (3..($fsize - 5)){
+				my @totest = subsets(\@verts, $size);
+				for my $G (@totest){
+					#if (scalar(@{$G}) < 3){
+					#	next;
+					#}
+					#if ($fsize - 2 - scalar(@{$G}) < 3){
+					#	next;
+					#}
+					push(@{$G}, $v);
+					push(@{$G}, $w);
+					$G = union($G, \@E);
+					if (scalar(@{carrier($subdiv, $G)}) > 0){
+						next;
+					}
+
+					#checks if the complement of $G with interior is also interior
+					my $lc = List::Compare->new($G, \@face);
+					my @others = $lc->get_complement;
+					push(@others, $v);
+					push(@others, $w);
+					@others = @{union(\@others, \@E)};
+					if (scalar(@{carrier($subdiv, \@others)}) == 0){
+						my $coef1 = scalar(@{$G});
+						my $coef2 = scalar(@others);
+						return 1;
+					}
+				}
+			}
 
 
+		}
+
+	}
+	return 0;
+
+}
 
 
+#usage: testRelativeAlanConjecture($subdiv, $size, $esize)
+#checks if any of the faces of size $size satisfying the hypothesis of Alan's conjecture with E of size $size
+#sorts by possible $E 
+#first checks if local h relative to E is 0, not clear that this is actually more efficient
+sub testRelativeAlanConjecture{
+	my $subdiv = shift;
+	my $size = shift;
+	my $esize = shift;
+	my $faces = allFacesSize($subdiv, ($size + $esize));
+	my $possibleEs = allFacesSize($subdiv, $esize);
+	for my $E (@{$possibleEs}){
+		if (sumArray(relativeLocalH($subdiv, $E)) != 0){
+			next;
+		}
+		for my $f (@{$faces}){
+		    my $lc = List::Compare->new($E, $f);
+    		my @intersection = $lc->get_intersection;
+    		if (scalar(@intersection) < $esize){
+    			next;
+    		}
+    		my @restofface = $lc->get_complement;
+    		#pArr(\@restofface);
+    		#pArr($E);
+			if (finelyTestRelativeConjecture($subdiv, \@restofface, $E) == 1){
+				print "Found counterexample \n";
+				pArr($E);
+				pArr($f);
+			}
+		}
+	}
+}
 
 
+#usage: specialLSOP(subdiv)
+#assumes E = \emptyset 
+#generates an AoA, (dim subdiv) x (number of vertices)
+#the ith spot is the coefficients of the a l.s.o.p. for the subdiv
+sub specialLSOP{
+	my $subdiv = shift;
+	my $dim = $subdiv->DIM;
+	my $nverts = $subdiv->N_VERTICES;
+	my @answer;
+	for my $i (0..$dim){
+		my @piece = (0) x $nverts;
+		for my $v (0..$nverts - 1){
+			if ((($subdiv->COORDINATES->[$subdiv->VERTEX_INDICES->[$v]])->[$i]) > 0){
+				$piece[$v] = rand();
+			}
+		}
+		push(@answer, \@piece);
+	}
+	return \@answer;
+}
+
+#usage: rankPDL(PDL matrix)
+#returns rank of a matrix
+#uses SVD 
+#doesn't work for the 0 matrix 
+sub rankPDL{
+	my $pdlmat = shift;
+	my @d = $pdlmat->dims;
+	if (($d[0] == 1) or ($d[1] == 1)){
+		return 1;
+	}
+	if ($d[0] > $d[1]){
+		$pdlmat = $pdlmat->transpose;
+	}
+	my ($u, $s, $v) = svd($pdlmat);
+	my @sings = $s->list;
+	my $rank = 0;
+	for my $i (0..(scalar(@sings) - 1)){
+		if (abs($sings[$i]) > 0.0000001){
+			$rank += 1;
+		}
+	}
+	return $rank;
+}
+
+#use: allIntFaces($subdiv, $size, $subset of vertices)
+#finds all interior faces supported on the given subset of vertices of a given size
+sub allIntFaces{
+	my $subdiv = shift;
+	my $size = shift;
+	my $subset = shift;
+	my @fs = @{$subdiv->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	#use hash to finds all faces
+	my %hash;
+	my @allfaces;
+	for my $facet (@fs){
+		my @faces = subsets($facet, $size);
+		for my $face (@faces){
+			my $str = "@{$face}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@allfaces, $face);
+			}
+		}
+	}
+	my @goodfaces;
+	for my $face (@allfaces){
+		if (scalar(@{carrier($subdiv, $face)}) > 0){
+			next;
+		}
+		my $lc = List::Compare->new($face, $subset);
+		if (scalar($lc->get_intersection) == $size){
+			push(@goodfaces, $face);
+		}
+	}
+	return @goodfaces;
+}
+
+#use: allCD1faces($subdiv, $size, $subset of vertices)
+#finds all carrier codimension 1 supported on the given subset of vertices of a given size
+sub allCD1Faces{
+	my $subdiv = shift;
+	my $size = shift;
+	my $subset = shift;
+	my @fs = @{$subdiv->FACETS};
+	@fs = map(vectorToArray($_), @fs);
+	#use hash to finds all faces
+	my %hash;
+	my @allfaces;
+	for my $facet (@fs){
+		my @faces = subsets($facet, $size);
+		for my $face (@faces){
+			my $str = "@{$face}";
+			if (not $hash{$str}){
+				$hash{$str} = 1;
+				push(@allfaces, $face);
+			}
+		}
+	}
+	my @goodfaces;
+	for my $face (@allfaces){
+		if (scalar(@{carrier($subdiv, $face)}) != 1){
+			next;
+		}
+		my $lc = List::Compare->new($face, $subset);
+		if (scalar($lc->get_intersection) == $size){
+			push(@goodfaces, $face);
+		}
+	}
+	return @goodfaces;
+}
+
+#usage: monomialVanishes($subdiv, minimal interior face, array of vertices)
+#checks if the monomial is 0 in the local face module restricted to the subcomplex induced by these vertices
+#face needs to be given in increasing order
+#returns 0 if it vanishes 
+#returns 1 if it does not vanish
+sub monomialVanishes{
+	my $subdiv = shift;
+	my $face = shift;
+	my $size = scalar(@{$face});
+	my $subset = shift;
+	my $lsop = specialLSOP($subdiv);
+	my @cd1faces = allCD1Faces($subdiv, $size - 1, $subset);
+	my @intfaces = allIntFaces($subdiv, $size, $subset);
+	#special case when no cd1 faces
+	if (scalar(@cd1faces) == 0){
+		return 1;
+	}
+	my $numint = scalar(@intfaces);
+	my @columns = ();
+	for my $cd1face (@cd1faces){
+		my $missing = carrier($subdiv, $cd1face)->[0];
+		my @facecolumn = (0) x $numint;
+		for my $i (0..($numint - 1)){
+			my $lc = List::Compare->new($cd1face, $intfaces[$i]);
+			my @others = $lc->get_complement;
+			if (scalar(@others) > 1){
+				next;
+			}
+			$facecolumn[$i] = $lsop->[$missing]->[$others[0]];
+		}
+		push(@columns, \@facecolumn);
+	}
+	my $mat = pdl(\@columns);
+	my $initrank = rankPDL($mat);
+	my @testcolumn = (0) x $numint;
+	#finds the location in @intfaces corresponding to the chosen face 
+	for my $i (0.. ($numint - 1)){
+		if (entrywiseEquality($face, $intfaces[$i])){
+			$testcolumn[$i] = 1;
+			last;
+		}
+	}
+	push(@columns, \@testcolumn);
+	my $mat2 = pdl(\@columns);
+	if (rankPDL($mat2) == 1 + $initrank){
+		return 1;
+	}
+	return 0;
+}
 
 
+#usage: checkInternalEdgeGraphVanishing($subdiv)
+#finds the internal edge graphs 
+#returns a list of the monomial corresponding to internal edges that vanish in the internal edge graph
+#and a list of the monomials that vanish in the the subdivision restricted to the subcomplex induced by the 
+#vertices of the internal edge graph 
+#subdivision should have no internal vertices
+sub checkInternalEdgeGraphVanishing{
+	my $subdiv = shift;
+	pArr(relativeLocalH($subdiv, []));
+	my $numvert = $subdiv->N_VERTICES;
+	my @intedges = allIntFaces($subdiv, 2, [0..($numvert - 1)]);
+	my $numedges = scalar(@intedges);
+	if ($numedges < 2){
+		print "No or one internal edges \n";
+		return [[], []];
+	}
+	my $lc = List::Compare->new(@intedges);
+	my @alledges = $lc->get_union;
+	my @wholecomplexvanishing;
+	#my @restrictedvanishing;
+	for my $edge (@intedges){
+		if (not monomialVanishes($subdiv, $edge, [0..($numvert - 1)])){
+			push(@wholecomplexvanishing, $edge);
+		}
+		#if (not monomialVanishes($subdiv, $edge, \@alledges)){
+		#	push(@restrictedvanishing, $edge);
+		#}
+	}
+	my $wholevanish = scalar(@wholecomplexvanishing);
+	#my $restrictedvanish = scalar(@restrictedvanishing);
+
+	print "num int edges is ", $numedges; 
+	print ", vanishing is ", $wholevanish, ", non-vanishing is ", ($numedges - $wholevanish), "\n";
+	return \@wholecomplexvanishing;
+}
 
 
+#usage: computeVw(subdiv, face, vertex)
+#computes |V_w|, finds all in which the face is a pyramid with apex w 
+#returns the number |V_w|
+#vertex should be in face
+sub computeVw{
+	my $subdiv = shift;
+	my $face = shift;
+	my $vertex = shift;
+	my $Vw = 0;
+	for my $i (0..$subdiv->DIM){
+		if ($subdiv->COORDINATES->[$subdiv->VERTEX_INDICES->[$vertex]]->[$i] == 0){
+			next;
+		}
+		my $numnonzero = 0;
+		for my $v (@{$face}){
+			if ($subdiv->COORDINATES->[$subdiv->VERTEX_INDICES->[$v]]->[$i] > 0){
+				$numnonzero += 1;
+			}
+
+		}
+		if ($numnonzero == 1){
+			$Vw += 1;
+		}
+	}
+	return $Vw;
+
+}
+
+#usage: hasInteriorPartition($subdiv)
+#checks if the subdivisions has an interior partition with E empty and each |V_w| > 1 for w in P
+#slow
+#returns 0 if it does not
+#returns the partition if it does
+sub hasInteriorPartition{
+	my $subdiv = shift;
+	#first does the case P = \emptyset
+	my @facets = @{$subdiv->FACETS};
+	my @face = ();
+	for my $facet (@facets){
+		my @facet = @{$facet};
+		if (not is_subset(\@facet, \@face)){
+			next;
+		}
+		if (pyramidOverFace($subdiv, $facet, \@face)){
+			next;
+		}
+		my $lc = List::Compare->new(\@facet, \@face);
+		my @comp = $lc->get_unique;
+		for my $k (0..int(scalar(@comp)/2)){
+			my @divisions = subsets(\@comp, $k);
+			for my $split (@divisions){
+				if (scalar(@{carrier($subdiv, union($split, \@face))}) > 0){
+					next;
+				}
+				my $list = List::Compare->new(\@comp, $split);
+				my @other = $list->get_unique;
+				if (scalar(@{carrier($subdiv, union(\@face, \@other))}) == 0){
+					return [$split, \@other];
+				}
+			}
+		}
+	}
+	my $bad = 0;
+	my $d = $subdiv->DIM;
+	my $maxP =  int(($d+ 1)/2);
+	for my $Psize (1..$maxP){
+	#	#loops over possible P
+		my @Pcandidates = @{allFacesSize($subdiv, $Psize)};
+		for my $P (@Pcandidates){
+			$bad = 0;
+			#first checks if they have a chance of being a good P 
+
+			for my $v (@{$P}){
+				my $vW = computeVw($subdiv, $P, $v);
+				if (($vW < 2) or ($d < 2*$Psize + $vW - 3)){
+					$bad = 1;
+					last;
+				}
+			}
+			if ($bad == 1){
+				next;
+			}
+			#loops over faces of link, looking for interior partitions with the given P 
+			#creates a list of all faces of the link, will be a bit inefficient 
+			my $link = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $P));
+			my $diagram = $link->HASSE_DIAGRAM;
+		    my @face_list = @{$diagram->FACES};
+		    shift(@face_list);
+		    my @face_list2 = map(reindex($link, vectorToArray($_)), @face_list);
+		    for my $face (@face_list2){
+		    	$bad = 0;
+		    	my $F2 = union($face, $P);
+				my @F = sort {$a <=> $b} @{$F2};
+		    	#checks if interior 
+		    	if (scalar(@{carrier($subdiv, \@F)}) > 0){
+		    		next;
+		    	}
+
+		    	#checks if the condition on P still holds 
+
+				for my $v (@{$P}){
+					if (computeVw($subdiv, \@F, $v) < 2){
+						$bad = 1;
+					last;
+					}
+				}
+				if ($bad == 1){
+					next;
+				}
+				#tries to subdivide $face into F_1, F_2, s.t. F_1 \cup P, F_2 \cup P both interior
+
+				for my $l (0..(int(scalar(@{$face})/2))){
+					my @divisions = subsets($face, $l);
+					for my $split (@divisions){
+						if (scalar(@{carrier($subdiv, union($split, $P))}) > 0){
+							next;
+						}
+					my $list = List::Compare->new($face, $split);
+					my @other = $list->get_unique;
+						if (scalar(@{carrier($subdiv, union($P, \@other))}) == 0){
+							return [$split, \@other, $P];
+						}
+					}
+				}
+
+		    }
+		}
+	}
+	return 0;
+}
+
+#usage: checkIntPartitionVanishing($subdiv)
+#find all full paritions 
+#checks if the corresponding monomials are non-vanishing 
+#returns 1 if there is an interior partition where a minimal interior facce does not vanish
+sub checkIntPartitionVanishing{
+	my $subdiv = shift;
+	my @facets = @{$subdiv->FACETS};
+	for my $facet (@facets){
+		my @facet = @{$facet};
+		for my $k (0..int(scalar(@facet/2))){
+			my @divisions = subsets(\@facet, $k);
+			for my $split (@divisions){
+				if (scalar(@{carrier($subdiv, $split)}) > 0){
+					next;
+				}
+				my $list = List::Compare->new(\@facet, $split);
+				my @other = $list->get_unique;
+				if (scalar(@{carrier($subdiv, \@other)}) == 0){
+					my $nonminimal = 0;
+					#checks if $split is minimal 
+					my @cd1faces = subsets($split, $k - 1);
+					for my $f (@cd1faces){
+						if (scalar(@{carrier($subdiv, $f)}) == 0){
+							$nonminimal = 1;
+							last;
+						}
+					}
+					#checks if split is non-zero in the local face module 
+					if ($nonminimal == 0){
+						if (monomialVanishes($subdiv, $split, \@facet) == 0){
+							pArr($split);
+							pArr(\@other);
+							return 1;
+						}
+					}
+				}
+			}
+		}
+	}
+	return 0;
+
+}
 
 
+#usage: lookForInterestingMonomials($subdiv)
+#returns 1 if it has no interior partition, but local h is non-zero
+#returns 2 if it has an interior partition with P empty, but the monomial vanishes in the facet 
+#returns 0 otherwise
+sub lookForInterestingMonomials{
+	my $subdiv = shift;
+	if (sumArray(relativeLocalH($subdiv, [])) > 0){
+		return 0;
+	}
+	if (not hasInteriorPartition($subdiv)){
+		return 1;
+	}
+	if (checkIntPartitionVanishing($subdiv)){
+		return 2;
+	}
+	return 1;
+}
+
+#usage: sortIntoClusters($diagram, list of facets)
+#list of facets should be a list of facets all contributing the same candidate pole 
+#sorts the facets by into clusters based on the minimal face contributing the candidate pole 
+#should be simplicial (for now)
+#returns an array of centers, follow by an AoAoA of facets with a given center 
+sub sortIntoClusters{
+	my $diagram = shift;
+	my $listOfFacets = shift;
+	my @centers;
+	my @clusters;
+	for my $facet (@{$listOfFacets}){
+		my $new = 1;
+		my @facet = @{$facet};
+		my $essential = minCritFace($diagram, \@facet);
+		for my $i (0..(scalar(@centers) - 1)){
+			if (entrywiseEquality($essential, $centers[$i])){
+				push(@{$clusters[$i]}, \@facet);
+				$new = 0;
+				next;
+			}
+		}
+		if ($new == 1){
+			push(@centers, $essential);
+			push(@clusters, [\@facet]);
+		}
+	}
+	return [\@centers, \@clusters];
+
+}
+
+#usage: allContributingCandidatePole($diagram, $list of facets, rational number)
+#returns an AoA of all the facets contributing the given rational number 
+sub allContributingCandidatePole{
+	my $diagram = shift;
+	my @facets = @{shift @_};
+	my $candidate = shift;
+	my @contributingfacets;
+	for my $index (0..(scalar(@facets) - 1)){
+		my $f = $facets[$index];
+		if ($candidate == rationalCandidatePole($diagram, $f)){
+			push(@contributingfacets, $f);
+		}
+	}
+	return \@contributingfacets;
+
+}
+
+#usage: checkIfCoherent($diagram, cluster of facets)
+#given a cluster of facets all sharing the same minimal critical face,
+#checks if there is a way to choose an apex and a base for all the facets 
+#so that if two of the facets intersect and have the same apex, then they have the same base 
+#does this by looping over all possible choices of the apex, base
+#returns the choice if there is a coherent choice 
+#returns 0 otherwise 
+sub checkIfCoherent{
+	my $diagram = shift;
+	my $cluster = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $num = scalar(@{$cluster});
+	my @listofpairs = map(peakDirectionPairs($diagram, $_), @{$cluster});
+	my $toTry = cartesian_product(@listofpairs);
+	for my $arrangement (@{$toTry}){
+		my $bad = 0;
+		for my $f1 (0..($num - 1)){
+			if ($bad == 1){
+				last;
+			}
+			for my $f2 (0..($num - 1)){
+				if ($f1 == $f2){
+					next;
+				}
+				my @facet1 = @{$cluster->[$f1]};
+				my @facet2 = @{$cluster->[$f2]};
+				my $lc = List::Compare->new((\@facet1, \@facet2));
+				if (scalar($lc->get_intersection) < ($dim - 1)){
+					next;
+				}
+				my $choice1 = $arrangement->[$f1];
+				my $choice2 = $arrangement->[$f2];
+				if ($choice1->[0] == $choice2->[0]){
+					if ($choice1->[1] != $choice2->[1]){
+						$bad = 1;
+						last;
+					}
+				}
+			}
+
+		}
+		if ($bad == 0){
+			return $arrangement
+		}
+	}
+	return 0;
+}
+
+#usage: peakDirectionPairs($diagram, $facet)
+#returns 0 if the facet is not B_1
+#returns all pairs of a peak of the B_1 facet and a direction that it is B_1 in.
+#pair is [vertex, direction]
+#works with any face, doesn't have to be a facet
+sub peakDirectionPairs{
+	my $diagram = shift;
+	my $facet = shift;
+	my @pairs;
+	for my $i (0..(scalar(@{$diagram->[0]}) - 1)){
+		my $P;
+		my $sum = 0;
+		for my $v (@{$facet}){
+			if ($diagram->[$v]->[$i] > 1){
+				$sum = 2;
+				last;
+			}
+			if ($diagram->[$v]->[$i] == 1){
+				$P = $v;
+				$sum += 1;
+			}
+			if ($sum > 1){
+				last;
+			}
+		}
+		if ($sum == 1){
+			push(@pairs, [$P, $i]);
+		}
+	}
+	return \@pairs;
+}
+
+#usage: exactNormal(AoA)
+#take an array of a bunch of vertices 
+#returns a normal vector 
+#only looks at the first n vectors
+#returns it as a polymake rational 
+#may fail if not simplicial. 
+sub exactNormal{
+	my $vectors = shift;
+	my @rows;
+	my @first = @{$vectors->[0]};
+	for my $i (1..(scalar(@first) - 1)){
+		my @row;
+		for my $j (0..(scalar(@first) - 1)){
+			push(@row, $first[$j] - $vectors->[$i]->[$j])
+		}
+		#push(@row, 0);
+		push(@rows, \@row);
+	}
+	#pads matrix with an extra row to determine the system and hopefully get integral coefficients
+	my @extra = (1) x (scalar(@first));
+	push(@rows, \@extra);
+	my $a = new Matrix<Rational>(\@rows);
+	my @row = (0) x (scalar(@first) - 1);
+	push(@row, 1);
+	my $v = new Vector<Rational>(\@row);
+	my $res = lin_solve($a, $v);
+	return $res;
 
 
+}
+
+#usage: rationalCandidatePole($diagram, $facet)
+#facets needs to actually be a facet
+#returns the candidate pole as a float
+#need to be careful if diagram isn't reduced
+#facet needs to be simplicial
+sub rationalCandidatePole{
+	my $diagram = shift;
+	my $facet = shift;
+	my @vertices;
+	for my $index (@{$facet}){
+		push(@vertices, $diagram->[$index]);
+	}
+	my $normal = exactNormal(\@vertices);
+	my $nu = sumArray($normal);
+	my $N = 0;
+	for my $index (0..(scalar(@{$normal}) - 1)){
+		$N += ($vertices[0]->[$index])*($normal->[$index]);
+	}
+	my $candidate = new Rational(-$nu/$N);
+	return $candidate;
+}
+
+#returnUniqueApex($diagram, $face)
+#returns all vertices that a unique apex 
+#i.e., apices that are apices in a unique direction
+sub returnUniqueApex{
+	my $diagram = shift;
+	my $face = shift;
+	my $peaksPairs = peakDirectionPairs($diagram, $face);
+	my @unique;
+	my $num = scalar(@{$peaksPairs}) - 1;
+	if ($num == -1){
+		return [];
+	}
+	if ($num == 0){
+		return [$peaksPairs->[0]->[0]];
+	}
+	for my $i (0..$num){
+		if ($i == 0){
+			if ($peaksPairs->[1]->[0] != $peaksPairs->[0]->[0]){
+				push(@unique, $peaksPairs->[0]->[0]);
+			}
+		}
+		elsif ($i == $num){
+			if ($peaksPairs->[$num]->[0] != $peaksPairs->[$num - 1]->[0]){
+				push(@unique, $peaksPairs->[$num]->[0]);
+			}
+		}
+		else{
+			if (($peaksPairs->[$i]->[0] != $peaksPairs->[$i - 1]->[0]) and ($peaksPairs->[$i]->[0] != $peaksPairs->[$i + 1]->[0])){
+				push(@unique, $peaksPairs->[$i]->[0]);
+			}
+		}
+	}
+	return \@unique;
+
+}
+#usage: hasFakeUniqueApex($diagram, [$center, $facets])
+#takes in a cluster of facets with a common center 
+#returns 1 if there is a vertex of the center that is an apex in a unique direction of the center 
+#but is not an apex of any of the facets 
+#a little inefficient, should only generate peakDirectionPairs once for each facet 
+sub hasFakeUniqueApex{
+	my $diagram = shift;
+	my $clusterdata = shift;
+	my $center = $clusterdata->[0];
+	my $facets = $clusterdata->[1];
+	my @fakes;
+	my $uniques = returnUniqueApex($diagram, $center);
+	for my $apex (@{$uniques}){
+		my $bad = 0;
+		for my $f (@{$facets}){
+			if ($bad == 1){
+				last;
+			}
+			my @peaks = @{peakDirectionPairs($diagram, $f)};
+			for my $pair (@peaks){
+				if ($pair->[0] == $apex){
+					$bad = 1;
+				}
+			}
+		}
+		if ($bad == 0){
+			push(@fakes, $apex);
+		}
+	}
+	return \@fakes;
+}
+
+#usage: isELTCoherent($diagram, cluster of facets)
+#given a cluster of facets all sharing the same minimal critical face,
+#checks if there is a way to choose an apex and a base for all the facets 
+#so that if two of the facets intersect, then they have the same base direction  
+#returns 0 if it is not [ELT] coherent 
+#returns the arrangement if it is [ELT] coherent
+sub isELTCoherent{
+	my $diagram = shift;
+	my $cluster = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $num = scalar(@{$cluster});
+	my @listofpairs = map(peakDirectionPairs($diagram, $_), @{$cluster});
+	my $toTry = cartesian_product(@listofpairs);
+	for my $arrangement (@{$toTry}){
+		my $bad = 0;
+		for my $f1 (0..($num - 1)){
+			if ($bad == 1){
+				last;
+			}
+			for my $f2 (0..($num - 1)){
+				if ($f1 == $f2){
+					next;
+				}
+				my @facet1 = @{$cluster->[$f1]};
+				my @facet2 = @{$cluster->[$f2]};
+				my $lc = List::Compare->new((\@facet1, \@facet2));
+				if (scalar($lc->get_intersection) < ($dim - 1)){
+					next;
+				}
+				my $choice1 = $arrangement->[$f1];
+				my $choice2 = $arrangement->[$f2];
+				if ($choice1->[1] != $choice2->[1]){
+					$bad = 1;
+					last;
+					
+				}
+			}
+
+		}
+		if ($bad == 0){
+			return $arrangement
+		}
+	}
+	return 0;
+
+}
+
+#usage: testCD1Conjecture($diagram, $center, $cluster, isPole, $subdiv)
+#center should have codimension 1
+#tests the conjecture about whether the pole is fake in this case
+#isPole should be 0 or 1
+#the conjecture: pole is fake unless the facet is B_1 or there is a unique apex of the center and is not ELT coherent
+#returns 0 if unexpected behavior
+sub testCD1Conjecture{
+	my $diagram = shift;
+	my $center = shift;
+	my $cluster = shift;
+	my $isPole = shift;
+	my $peaks0 = peakDirectionPairs($diagram, $cluster->[0]);
+	my $peaks1 = peakDirectionPairs($diagram, $cluster->[1]);
+	#checks if either facet is not B_1
+	if ((scalar(@{$peaks0}) == 0) or (scalar(@{$peaks1}) == 0)){
+		if ($isPole == 0){
+			print "CD1 case, Pole is fake even though not B_1 \n";
+			return 0;
+		}
+		else{
+			return 1;
+		}
+	}
+	#checks if there is a vertex in $center that is B_1 in a unique direction 
+	#if this is the case, then pole should be fake 
+	#as long as both facets are B_1
+	my $uniques = returnUniqueApex($diagram, $center);
+	if (scalar(@{$uniques}) > 0){
+		if ($isPole == 1){
+			print "Pole is real even though there is a unique apex, CD 1 conjecture is wrong \n";
+			pArrArr($cluster);
+			return 0;
+		}
+		else{
+			return 1;
+		}
+	}
+	#if there is is no unique apex, then only need to check ELT coherence 
+	if (isELTCoherent($diagram, $cluster) == 0){
+		if ($isPole == 0){
+			print "Pole is fake even though should be real \n";
+			pArrArr($cluster);
+			my $subdiv = shift;
+			my $essential = returnQ($diagram, 3, $cluster->[0]);
+			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
+				pArrArr($facets);
+				print "Eigenvalue unexpectedly does not contribute \n";
+			}
+			return 0;
+		}
+		else{
+			return 1;
+		}
+	}
+	else{
+		if ($isPole == 1){
+			print "Pole is real even though ELT coherent \n";
+			return 0;
+		}
+		else{
+			return 1;
+		}
+	}
+
+}
 
 
+#usage:getAllClusterFaces($subdiv, $center)
+#returns a list of all faces in the cluster 
+#in other words finds all the faces in the star of a face
+sub getAllClusterFaces{
+	my $subdiv = shift;
+	my $dim = $subdiv->DIM;
+	my $center = shift;
+	if (scalar(@{$center}) == 1 + $dim){
+		return [$center];
+	}
+	my $link = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $center));
+    #creates array of the faces
+    my $diagram = $link->HASSE_DIAGRAM;
+    my $face_list = $diagram->FACES;
+    my @face_list = @{$face_list};
+    shift(@face_list);
+    my @face_list2 = map(vectorToArray($_), @face_list);
+    my @face_list3 = map(reindex($link, $_), @face_list2);
+    for my $face (@face_list3){
+    	push(@{$face}, @{$center});
+    	@{$face} = sort {$a <=> $b} @{$face};
+
+    }
+    return \@face_list3;
+}
 
 
+#usage: tripleContainment([set1, set2, set3])
+#if one triple is contained in the other two, returns them with the small triple first 
+#sets must be sorted 
+#otherwise returns 0
+sub tripleContainment{
+	my $sets = shift;
+	my @set1 = @{$sets->[0]};
+	my @set2 = @{$sets->[1]};
+	my @set3 = @{$sets->[2]};
+	if ((is_subset(\@set2, \@set1)) and (is_subset(\@set2, \@set1))){
+		return [\@set1, \@set2, \@set3];
+	}
+	if ((is_subset(\@set1, \@set2)) and (is_subset(\@set3, \@set2))){
+		return [\@set2, \@set1, \@set3];
+	}
+	if ((is_subset(\@set2, \@set3)) and (is_subset(\@set1, \@set3))){
+		return [\@set3, \@set2, \@set1];
+	}
+	return 0;
+}
 
+#usage: checkForOperativeBad($diagram, $subdiv, $center)
+#checks if there is an operative labeling 
+#returns the operative labeling if there is, 0 if there is not
+#can take a long time, does it by brute force
+sub checkForOperativeBad{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my $center = shift;
+	my @flist = @{getAllClusterFaces($subdiv, $center)};
+	#if center is a facet, checks if it is B_1
+	if (scalar(@flist) < 3){
+		if (isB1Facet($diagram, $center) == 0){
+			return 0;
+		}
+		else{
+			return $center;
+		}
+	}
+	my @listofpairs = map(peakDirectionPairs($diagram, $_), @flist);
+	my $toTry = cartesian_product(@listofpairs);
+	my @alltriples = subsets(\@flist, 3);
+	my @triples;
+	#finds the triples where one is contained in both 
+	for my $trip (@alltriples){
+		#pArrArr($trip->[0]);
+		if (tripleContainment($trip) != 0){
+			push(@triples, tripleContainment($trip));
+			pArrArr(tripleContainment($trip));
+		}
+	}
+	pArrArr(\@flist);
+	for my $arrangement (@{$toTry}){
+		my $bad = 0;
+		#makes hash of pairs 
+		my %hash;
+		for my $i (0..(scalar(@flist) - 1)){
+			my $str = "@{$flist[$i]}";
+			$hash{$str} = $arrangement->[$i];
+		}
+		for my $triple (@triples){
+			if (($hash{"@{$triple->[0]}"}->[0] == $hash{"@{$triple->[1]}"}->[0]) and ($hash{"@{$triple->[0]}"}->[0] == $hash{"@{$triple->[2]}"}->[0])){
+				if ((($hash{"@{$triple->[0]}"}->[1]) != $hash{"@{$triple->[1]}"}->[1]) or (($hash{"@{$triple->[0]}"}->[1]) == $hash{"@{$triple->[2]}"}->[1])){
+					$bad = 1;
+					last;
+				}
+			}
+		}
+		if ($bad == 0){
+			return $arrangement;
+		}
+	}
+	return 0;
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#usage: checkForOperative($diagram, $subdiv, $center)
+#checks if there is an operative labeling 
+#returns the operative labeling if there is, 0 if there is not
+#can take a long time, does it by brute force
+sub checkForOperative{
+	my $diagram = shift;
+	my $subdiv = shift;
+	my $center = shift;
+	my @flist = @{getAllClusterFaces($subdiv, $center)};
+	#if center is a facet, checks if it is B_1
+	if (scalar(@flist) < 3){
+		if (isB1Facet($diagram, $center) == 0){
+			return 0;
+		}
+		else{
+			return $center;
+		}
+	}
+	my @listofpairs = map(peakDirectionPairs($diagram, $_), @flist);
+	my $toTry = cartesian_product(@listofpairs);
+	if (scalar(@{$toTry}) > 1000){
+		print "too many options to check \n";
+		return 1;
+	}
+	my @allpairs = subsets(\@flist, 2);
+	my @pairs;
+	#finds the triples where one is contained in both 
+	for my $pair (@allpairs){
+		#pArrArr($trip->[0]);
+		if (is_subset($pair->[1], $pair->[0]) != 0){
+			push(@pairs, $pair);
+		}
+		elsif(is_subset($pair->[0], $pair->[1]) != 0){
+			push(@pairs, [$pair->[1], $pair->[0]]);
+		}
+	}
+	#pArrArr(\@flist);
+	for my $arrangement (@{$toTry}){
+		my $bad = 0;
+		#makes hash of pairs 
+		my %hash;
+		for my $i (0..(scalar(@flist) - 1)){
+			my $str = "@{$flist[$i]}";
+			$hash{$str} = $arrangement->[$i];
+		}
+		for my $pair (@pairs){
+			if ($hash{"@{$pair->[0]}"}->[0] == $hash{"@{$pair->[1]}"}->[0]){
+				if ($hash{"@{$pair->[0]}"}->[1] != $hash{"@{$pair->[1]}"}->[1]){
+					$bad = 1;
+					last;
+				}
+			}
+		}
+		if ($bad == 0){
+			return $arrangement;
+		}
+	}
+	return 0;
+}
