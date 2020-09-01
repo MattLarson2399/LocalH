@@ -354,7 +354,6 @@ sub localZetaFunction{
 	my $factor = new UniPolynomial "x/(x + 1)";
 	#cdim + 1 = dimension of cone
 	#dimension of face = dim - cdim - 1
-	my $tzeta = new UniPolynomial("0");
 	for my $cdim (0..($dim - 1)){
 		for my $cone (@{$cones[$cdim]}){
 			my @theserays = map(\@{$rays[$_]}, @{$cone});
@@ -368,11 +367,15 @@ sub localZetaFunction{
 
 			if ($num == 1){
 				$zeta = $zeta + totalContribution(\@theserays, $diagram);
-				#my $t = totalContribution(\@theserays, $diagram);
+				my $t = totalContribution(\@theserays, $diagram);
 				#if (isPole($t, -184/143)){
-				#	pArr $face;
-				#	pArr $cone;
-				#	print $t;
+				pArr $face;
+				#pArr $cone;
+				print $t;
+				#print "\n";
+				#print $zeta;
+
+				print "\n \n";
 				#	print "\n";
 				#	$tzeta = $tzeta + $t;
 				#}
@@ -382,18 +385,22 @@ sub localZetaFunction{
 				my $fdim = $dim - $cdim - 1;
 				my @verts = map($diagram->[$_], @{$face});
 				my $coef = powMinusOne($fdim)*normalizedVolume(\@verts);
+				$zeta = $zeta + $factor*$coef*$contrib;
 				#if (isPole($contrib, -184/143)){
 				#	if ($num == 2 and $face->[1] == 6){
-				#		pArr $face;
-				#		pArr $cone;
+				pArr $face;
+				#pArr $cone;
 				#		print $contrib;
 				#		print "\n factor is $coef \n";
-				#		print $factor*$coef*$contrib;
+				print $factor*$coef*$contrib;
+				#print "\n";
+				#print $zeta;
+				print "\n \n";
+
 				#		print "\n";
 				#		$tzeta = $tzeta + $factor*$coef*$contrib;
 				#	}
 				#}
-				$zeta = $zeta + $factor*$coef*$contrib;
 			}
 		}
 	}
@@ -634,25 +641,26 @@ sub generateDiagramsForMonodromy{
 
 
 
-#usage: totalContribution(rays of a cone, fan, P)
+#usage: integralP(rays of a cone, fan, P)
 #returns the integral over the cone paired with P
 sub integralP{
 	my $cone = shift;
 	my $fan = shift;
 	my @allrays = @{$fan->RAYS};
 	my $P = shift;
-	my @theserays = map(\@{$rays[$_]}, @{$cone});
+	my @theserays = map(\@{$allrays[$_]}, @{$cone});
 	my $primitive = subdivideCone(\@theserays);
 	my $answer = new UniPolynomial("0");
 	for my $tri (@{$primitive}){
 		my @subdividedrays = map($theserays[$_], @{$tri});
 		my @prim = map(changeToPrimitive($_), @subdividedrays);
-		my $trianglecontrib = new UniPolynomial(1);
+		my $mult = multiplicityArray(\@prim);
+		my $trianglecontrib = new UniPolynomial($mult);
 		for my $p (@prim){
 			my $pairing = dotProduct($P, $p);
 			my $v = sumArray($p);
 			my $contrib = new UniPolynomial("$pairing*x + $v");
-			$trianglecontrib = $trianglecontrib/$contrib
+			$trianglecontrib = $trianglecontrib/$contrib;
 		}
 		$answer = $answer + $trianglecontrib;
 	}
@@ -952,4 +960,194 @@ sub testOperativeConjecture{
 
 
 }
+
+#usage: makeArrayRational(array)
+#turns it into a polymake rational vector
+sub makeArrayRational{
+	my $array = shift;
+	my $vec = new Vector<Rational>($array);
+	return $vec;
+}
+
+#usage: integralPExplicit(array of rays, vertex)
+#returns the integral with respect ot the vertex over the cone spanned by the rays
+sub integralPExplicit{
+	my $rays = shift;
+	my $vertex = shift;
+	my $primitive = subdivideCone($rays);
+	my $answer = new UniPolynomial("0");
+	for my $tri (@{$primitive}){
+		my @subdividedrays = map($rays->[$_], @{$tri});
+		my @prim = map(changeToPrimitive(makeArrayRational($_)), @subdividedrays);
+		my $mult = multiplicityArray(\@prim);
+		my $trianglecontrib = new UniPolynomial($mult);
+		for my $p (@prim){
+			my $pairing = dotProduct($vertex, $p);
+			my $v = sumArray($p);
+			my $contrib = new UniPolynomial("$pairing*x + $v");
+			$trianglecontrib = $trianglecontrib/$contrib;
+		}
+		$answer = $answer + $trianglecontrib;
+	}
+	return $answer;
+
+}
+
+#usage: faceToCone($diagram, $face, $list of rays of dual fan)
+#finds the cone that is dual to the face 
+sub faceToCone{
+	my $diagram = shift;
+	my $face = shift;
+	my $rays = shift;
+	my @cone;
+	for my $r (@{$rays}){
+		my $bad = 0;
+		my $pairing = dotProduct($r, $diagram->[$face->[0]]);
+		for my $v (@{$face}){
+			if (dotProduct($r, $diagram->[$v])!= $pairing){
+				$bad = 1;
+				last;
+			}
+		}
+		if ($bad == 1){
+			next;
+		}
+		for my $v (@{$diagram}){
+			if (dotProduct($r, $v) < $pairing){
+				$bad = 1;
+				last;
+			}
+		}
+		if ($bad == 1){
+			next;
+		}
+		push(@cone, $r)		
+	}
+	return \@cone;
+}
+
+
+
+#usage: testConversionStrategy($diagram, $subdiv, $center, cluster)
+#if there is no operative labeling, returns -1
+#otherwise, choses an operative labeling 
+#this should be the only cluster contributing the candidate pole 
+#arranges all terms contributing the candidate pole so that they are integrals 
+#over certain maximal cones 
+#then checks if it is okay to swap the vertex they are integrating against
+#returns 0 if everything is as expected 
+#returns 1 if not
+sub testConversionStrategy{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = shift;
+	my $center = shift;
+	my $facets = shift;
+	if (scalar(@{$facets}) == 1){
+		return 0;
+	}
+	my $pole = rationalCandidatePole($diagram, $facets->[0]);
+	if ($pole == -1){
+		return 0;
+	}
+	my $allcontributing = allContributingFacets($diagram, \@{$subdiv->FACETS}, $pole);
+	if (scalar(@{$allcontributing}) > scalar(@{$facets})){
+		return 0;
+	}
+	my @clusterfaces = @{getAllClusterFaces($subdiv, $center)};
+	my $num = scalar(@clusterfaces) - 1;
+	my $fan = dualFan($diagram);
+	my @rays = @{$fan->RAYS};
+	#center is the last face 
+	my @labeling;
+	#faces are labeled in the same order as @clusterfaces 
+	for my $face (@clusterfaces){
+		my @uniques = @{returnUniqueApex($diagram, $face)};
+		if (scalar(@uniques) == 0){
+			return -1;
+		}
+		#chooses random unique apex
+		my $random = int(scalar(@uniques)*rand);
+		push(@labeling, $uniques[$random]);
+	}
+	my $minlabeling = $labeling[$num];
+	#finds all vertices that contribute
+	my $lc = List::Compare->new(@{$facets});
+	my @verts = $lc->get_union;		
+
+	#for each face, finds the minimal face that contains it 
+	#uses the @clusterfaces is ordered by decreasing size
+	for my $v (@verts){
+		if ($v == $minlabeling){
+			next;
+		}
+		my $assocface = [];
+		my $label = -1;
+		for my $i (0..$num){
+			if (is_subset($clusterfaces[$i], [$v])){
+				$assocface = $clusterfaces[$i];
+				$label = $labeling[$i];
+			}
+		}
+		#automatically okay if label is the minimal label
+		if ($label == $minlabeling){
+			next;
+		}
+		#finds the direction in which the apex is B_1
+		my $B1direction = -1;
+		for my $direction (0..($dim - 1)){
+			if ($diagram->[$label]->[$direction] != 1){
+				next;
+			}
+			my $sum = 0;
+			for my $fvert (@{$assocface}){
+				$sum += $diagram->[$fvert]->[$direction];
+			}
+			if ($sum == 1){
+				$B1direction = $direction;
+				last;
+			}
+		}
+		#print $B1direction;
+		#finds rays of the cone
+		#does this by looping over all rays, checking if they have same value on $v and $label
+		my @raysofcone = @{faceToCone($diagram, [$v, $label], \@rays)};
+		#adds the e_{B1directioin} ray 
+		my @otherray = (0) x $dim;
+		$otherray[$B1direction] = 1;
+		push(@raysofcone, \@otherray);
+		#@raysofcone = map(vectorToArray($_), @raysofcone);
+		#pArrArr(\@raysofcone);
+		#compares the integrals 
+		my $Inormal = integralPExplicit(\@raysofcone, $diagram->[$label]);
+		my $Iminimal = integralPExplicit(\@raysofcone, $diagram->[$minlabeling]);
+		if (isPole($Inormal - $Iminimal, $pole)){
+			print "Counterexample found \n";
+			print "Vertex is ", $v, "\n";
+			print "Apex is ", $label, "\n";
+			print "Direction is ", $B1direction, "\n";
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+#usage: testAllClusters($diagram)
+#tests all the clusters to see if the conversion stategy works 
+sub testAllClusters{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @clusters = @{$centerclusters->[1]};
+	my @centers = @{$centerclusters->[0]};
+	for my $i (0..(scalar(@clusters) - 1)){
+		if (testConversionStrategy($diagram, $subdiv, $centers[$i], $clusters[$i]) == 1){
+			pArr($centers[$i]);
+		}
+	}
+}
+
+
 

@@ -5963,13 +5963,12 @@ sub rationalCandidatePole{
 }
 
 #returnUniqueApex($diagram, $face)
-#returns all vertices that a unique apex 
+#returns all vertices that are a unique apex 
 #i.e., apices that are apices in a unique direction
 sub returnUniqueApex{
 	my $diagram = shift;
 	my $face = shift;
 	my $peaksPairs = peakDirectionPairs($diagram, $face);
-	my @unique;
 	my $num = scalar(@{$peaksPairs}) - 1;
 	if ($num == -1){
 		return [];
@@ -5977,24 +5976,17 @@ sub returnUniqueApex{
 	if ($num == 0){
 		return [$peaksPairs->[0]->[0]];
 	}
-	for my $i (0..$num){
-		if ($i == 0){
-			if ($peaksPairs->[1]->[0] != $peaksPairs->[0]->[0]){
-				push(@unique, $peaksPairs->[0]->[0]);
-			}
-		}
-		elsif ($i == $num){
-			if ($peaksPairs->[$num]->[0] != $peaksPairs->[$num - 1]->[0]){
-				push(@unique, $peaksPairs->[$num]->[0]);
-			}
-		}
-		else{
-			if (($peaksPairs->[$i]->[0] != $peaksPairs->[$i - 1]->[0]) and ($peaksPairs->[$i]->[0] != $peaksPairs->[$i + 1]->[0])){
-				push(@unique, $peaksPairs->[$i]->[0]);
-			}
-		}
+	my @peaks;
+	for my $pair (@{$peaksPairs}){
+		push(@peaks, $pair->[0]);
 	}
-	return \@unique;
+	my @uniq = do {
+    	my %count;
+    	$count{$_}++ for @peaks;
+    	grep {$count{$_} == 1} keys %count;
+	};
+
+	return \@uniq;
 
 }
 #usage: hasFakeUniqueApex($diagram, [$center, $facets])
@@ -6169,138 +6161,45 @@ sub getAllClusterFaces{
     return \@face_list3;
 }
 
-
-#usage: tripleContainment([set1, set2, set3])
-#if one triple is contained in the other two, returns them with the small triple first 
-#sets must be sorted 
-#otherwise returns 0
-sub tripleContainment{
-	my $sets = shift;
-	my @set1 = @{$sets->[0]};
-	my @set2 = @{$sets->[1]};
-	my @set3 = @{$sets->[2]};
-	if ((is_subset(\@set2, \@set1)) and (is_subset(\@set2, \@set1))){
-		return [\@set1, \@set2, \@set3];
-	}
-	if ((is_subset(\@set1, \@set2)) and (is_subset(\@set3, \@set2))){
-		return [\@set2, \@set1, \@set3];
-	}
-	if ((is_subset(\@set2, \@set3)) and (is_subset(\@set1, \@set3))){
-		return [\@set3, \@set2, \@set1];
-	}
-	return 0;
-}
-
-#usage: checkForOperativeBad($diagram, $subdiv, $center)
-#checks if there is an operative labeling 
-#returns the operative labeling if there is, 0 if there is not
-#can take a long time, does it by brute force
-sub checkForOperativeBad{
+#usage: checkIfOperative($diagram, $subdiv, $center)
+#checks if there is an operative labeling of the poset of faces above the cluster 
+#assumes simplicial
+#returns 1 if there is an operative labeling, 0 otherwise
+sub checkIfOperative{
 	my $diagram = shift;
 	my $subdiv = shift;
 	my $center = shift;
-	my @flist = @{getAllClusterFaces($subdiv, $center)};
-	#if center is a facet, checks if it is B_1
-	if (scalar(@flist) < 3){
-		if (isB1Facet($diagram, $center) == 0){
+	my @clusterfaces = @{getAllClusterFaces($subdiv, $center)};
+	for my $face (@clusterfaces){
+		if (scalar(@{returnUniqueApex($diagram, $face)}) == 0){
 			return 0;
 		}
-		else{
-			return $center;
-		}
 	}
-	my @listofpairs = map(peakDirectionPairs($diagram, $_), @flist);
-	my $toTry = cartesian_product(@listofpairs);
-	my @alltriples = subsets(\@flist, 3);
-	my @triples;
-	#finds the triples where one is contained in both 
-	for my $trip (@alltriples){
-		#pArrArr($trip->[0]);
-		if (tripleContainment($trip) != 0){
-			push(@triples, tripleContainment($trip));
-			pArrArr(tripleContainment($trip));
+	return 1;
+}
+
+#sub: findLargeCDOperative($diagram)
+#returns 1 if there is a cluster with center having codimension at least 2
+#that has an operative labeling
+sub findLargeCDOperative{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = diagramToSubdiv($diagram);
+	my @allfacets = @{$subdiv->FACETS};
+	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
+	my @centers = @{$centerclusters->[0]};
+	for my $c (@centers){
+		if (scalar(@{$c}) > $dim - 1){
+			next;
 		}
-	}
-	pArrArr(\@flist);
-	for my $arrangement (@{$toTry}){
-		my $bad = 0;
-		#makes hash of pairs 
-		my %hash;
-		for my $i (0..(scalar(@flist) - 1)){
-			my $str = "@{$flist[$i]}";
-			$hash{$str} = $arrangement->[$i];
-		}
-		for my $triple (@triples){
-			if (($hash{"@{$triple->[0]}"}->[0] == $hash{"@{$triple->[1]}"}->[0]) and ($hash{"@{$triple->[0]}"}->[0] == $hash{"@{$triple->[2]}"}->[0])){
-				if ((($hash{"@{$triple->[0]}"}->[1]) != $hash{"@{$triple->[1]}"}->[1]) or (($hash{"@{$triple->[0]}"}->[1]) == $hash{"@{$triple->[2]}"}->[1])){
-					$bad = 1;
-					last;
-				}
-			}
-		}
-		if ($bad == 0){
-			return $arrangement;
+		if (checkIfOperative($diagram, $subdiv, $c)){
+			pArr($c);
+			return 1;
 		}
 	}
 	return 0;
 }
 
-#usage: checkForOperative($diagram, $subdiv, $center)
-#checks if there is an operative labeling 
-#returns the operative labeling if there is, 0 if there is not
-#can take a long time, does it by brute force
-sub checkForOperative{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my $center = shift;
-	my @flist = @{getAllClusterFaces($subdiv, $center)};
-	#if center is a facet, checks if it is B_1
-	if (scalar(@flist) < 3){
-		if (isB1Facet($diagram, $center) == 0){
-			return 0;
-		}
-		else{
-			return $center;
-		}
-	}
-	my @listofpairs = map(peakDirectionPairs($diagram, $_), @flist);
-	my $toTry = cartesian_product(@listofpairs);
-	if (scalar(@{$toTry}) > 1000){
-		print "too many options to check \n";
-		return 1;
-	}
-	my @allpairs = subsets(\@flist, 2);
-	my @pairs;
-	#finds the triples where one is contained in both 
-	for my $pair (@allpairs){
-		#pArrArr($trip->[0]);
-		if (is_subset($pair->[1], $pair->[0]) != 0){
-			push(@pairs, $pair);
-		}
-		elsif(is_subset($pair->[0], $pair->[1]) != 0){
-			push(@pairs, [$pair->[1], $pair->[0]]);
-		}
-	}
-	#pArrArr(\@flist);
-	for my $arrangement (@{$toTry}){
-		my $bad = 0;
-		#makes hash of pairs 
-		my %hash;
-		for my $i (0..(scalar(@flist) - 1)){
-			my $str = "@{$flist[$i]}";
-			$hash{$str} = $arrangement->[$i];
-		}
-		for my $pair (@pairs){
-			if ($hash{"@{$pair->[0]}"}->[0] == $hash{"@{$pair->[1]}"}->[0]){
-				if ($hash{"@{$pair->[0]}"}->[1] != $hash{"@{$pair->[1]}"}->[1]){
-					$bad = 1;
-					last;
-				}
-			}
-		}
-		if ($bad == 0){
-			return $arrangement;
-		}
-	}
-	return 0;
-}
+
+
+
