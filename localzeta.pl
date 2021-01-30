@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Matt Larson
-#Last updated: 08/30/2020
+#Last updated: 01/29/2021
 
 #computes the topological local zeta function associated to a Newton polyhedron
 
@@ -8,9 +8,10 @@ use strict;
 use warnings;
 use application "polytope";
 use Algorithm::Combinatorics "subsets";
-#use Math::Matrix;
 
 script("/Users/matthew/Desktop/Local_Zeta_Function/code/subs.pl");
+
+#has code for computing the topological zeta function 
 
 
 
@@ -69,19 +70,6 @@ sub changeToPrimitive{
 		push(@result, $a);
 	}
 	return makePrimitive(\@result);
-}
-
-#usage:dotProduct($aref, $aref)
-#arefs should be the same length
-#computes the dot product
-sub dotProduct{
-	my $vec1 = shift;
-	my $vec2 = shift;
-	my $answer = 0;
-	for my $i (0..(scalar(@{$vec1}) - 1)){
-		$answer += ($vec1->[$i])*($vec2->[$i]);
-	}
-	return $answer;
 }
 
 
@@ -197,7 +185,8 @@ sub allConesByDim{
 #the AoA must be a sorted (by decreasing length) array of the bounded faces of the newton polyhedron 
 #facet should be given as a list of vertices in the diagram, diagram should be reduced
 #returns the facet corresponding to the array
-#does this by looping through the facets, checking if the pairing of ray with all vertices in them is the same
+#does this by looping through the facets, 
+#checking if the pairing of ray with all vertices in them is the same
 #if it doesn't match any of them then returns -1
 sub rayToFacet{
 	my @ray = @{shift @_};
@@ -260,22 +249,11 @@ sub facetList{
 	return \@result;
 }
 
-#usage:coneHash($diagram, $faceList, $dualFan)
-#returns the faces in the order of the rays
-#doesn't actually return a hash
-#doesn't work
-sub badConeHash{
-	my $diagram = shift;
-	my $facelist = shift;
-	my $dualFan = shift;
-	my @rays = map(vectorToArray($_), @{$dualFan->RAYS});
-	my @faces = map(rayToFacet($_, $diagram, $facelist), @rays);
-	return \@faces;
-}
 
 #usage: coneHash($facetlist, $diagram)
 #diagram must be reduced
-#creates a ray - to - facet correspondence by taking the facets of the newton polyhedron, removing the far face
+#creates a ray - to - facet correspondence by taking the facets of the newton polyhedron, 
+#removing the far face
 sub coneHash{
 	my $flist = shift;
 	my $diagram = shift;
@@ -304,41 +282,12 @@ sub coneToFace{
 	return \@answer;
 }
 
-#usage: findFace(cone, diagram)
-#takes a cone in the dual cone, returns the face in the newton polyhedron that it corresponds to
-#input cone as an array of spanning vertices 
-#they should actually be a non-empty cone in the dual fan
-#returns the indices of the vertices
-#doesn't work
-sub findFace{
-	my @cone = @{shift @_};
-	my $diagram = shift;
-	my $n = computeN($cone[0], $diagram);
-	my @face;
-	for my $vertex (0..(scalar(@{$diagram}) - 1)){
-		if (dotProduct($diagram->[$vertex], $cone[0]) == $n){
-
-			push(@face, $vertex);
-		}		
-	}
-	for my $index (1..(scalar(@cone) - 1)){
-		$n = computeN($cone[$index], $diagram);
-		my @face2;
-		for my $vertex (0..(scalar(@{$diagram}) - 1)){
-			if (dotProduct($diagram->[$vertex], $cone[$index]) == $n){
-				push(@face2, $vertex);
-			}
-		}
-		my $lc = List::Compare->new(\@face, \@face2);
-		@face = $lc->get_intersection;		
-	}
-	return \@face;
-}
 
 
 #usage: localZetaFunction($diagram)
 #computes the topological local zeta function
-#for now only works for simplicial, because otherwise I need to do something more intelligent to compute the dim of a face
+#for now only works for simplicial, because otherwise I need to do something more intelligent 
+#to compute the dim of a face
 #diagram must be reduced
 sub localZetaFunction{
 	my $diagram = shift;
@@ -367,18 +316,6 @@ sub localZetaFunction{
 
 			if ($num == 1){
 				$zeta = $zeta + totalContribution(\@theserays, $diagram);
-				my $t = totalContribution(\@theserays, $diagram);
-				#if (isPole($t, -184/143)){
-				pArr $face;
-				#pArr $cone;
-				print $t;
-				#print "\n";
-				#print $zeta;
-
-				print "\n \n";
-				#	print "\n";
-				#	$tzeta = $tzeta + $t;
-				#}
 			}
 			if ($num > 1){
 				my $contrib = totalContribution(\@theserays, $diagram);
@@ -386,21 +323,6 @@ sub localZetaFunction{
 				my @verts = map($diagram->[$_], @{$face});
 				my $coef = powMinusOne($fdim)*normalizedVolume(\@verts);
 				$zeta = $zeta + $factor*$coef*$contrib;
-				#if (isPole($contrib, -184/143)){
-				#	if ($num == 2 and $face->[1] == 6){
-				pArr $face;
-				#pArr $cone;
-				#		print $contrib;
-				#		print "\n factor is $coef \n";
-				print $factor*$coef*$contrib;
-				#print "\n";
-				#print $zeta;
-				print "\n \n";
-
-				#		print "\n";
-				#		$tzeta = $tzeta + $factor*$coef*$contrib;
-				#	}
-				#}
 			}
 		}
 	}
@@ -439,133 +361,7 @@ sub allContributingFacets{
 	return \@facets; 
 }
 
-#usage:checkAllForCounterexample($diagram)
-#diagramn must be reduced
-#checks every pole if it gives a counterexample
-#checks if there is a facet with essential face contributing
-#doesn't work because it doesn't use exactCandidatePole
-sub checkAllForCounterexample{
-	my $diagram = shift;
-	my $subdiv = nonSimpDiagramToSimp($diagram);
-	my $flist = $subdiv->FACETS;
-	my $list = allCandidatePoles($diagram);
-	my $localzeta = localZetaFunction($diagram);
-	my $good = 0;
-	for my $num (@{$list}){
-		$good = 0;
-		if (isPole($localzeta, $num)){
-			print "checking ", $num, "\n";
-			my $facets = allContributingFacets($diagram, $flist, $num);
-			for my $f (@{$facets}){
-				if (computeMultiplicity($diagram, $f) > 0){
-					$good = 1;
-					last;
-				}
-			}
-			if ($good == 0){
-				print "Found counterexample";
-			return 1;
-			}
-		}
 
-	}
-	return 0;	
-}
-
-#usage: quicklyTestDiagram($diagram)
-#diagram need not be reduced
-#tests topological monodromy conjecture
-#does not use any results about when B_1 facets don't give rise to candidate poles
-#checks for each pole if there is a B_1 facet that contributes that eigenvalue, there could be other facets
-sub quicklyTestDiagram{
-	my $diagram = shift;
-	$diagram = completelyReduceDiagram($diagram);
-	my $subdiv = nonSimpDiagramToSimp($diagram);
-	my $perturbed = diagramToPerturbedSubdiv($diagram);
-	#finds the universally B_1 facets and B_1 facet
-	my @tocheck;
-	my @flist = @{$subdiv->FACETS};
-	for my $f (@flist){
-		my @facet = @{$f};
-		if (isB1Facet($diagram, \@facet)){
-			push(@tocheck, \@facet);
-			next;
-		}
-		if (noGoodTriangulation($diagram, \@facet)){
-			push(@tocheck, \@facet);
-		}
-
-	}
-	if (scalar(@tocheck) == 0){
-		return 0;
-	}
-	my $localzeta = localZetaFunction($diagram);
-	#creates list of real poles that are contribute by (universally) B_1 facets
-	my @allcandidates;
-	for my $f (@tocheck){
-		my @f = @{$f};
-		push(@allcandidates, exactCandidatePole($diagram, \@f));
-	}
-	#checks if these candidates are actually poles
-	my @poleslist;
-	for my $pole (@allcandidates){
-		if (rationalCanonicalMod1($pole) < 0.0000001){
-			next;
-		}
-		if (abs(rationalCanonicalMod1($pole) - 1) < 0.0000001){
-			next;
-		}
-		if (isPole($localzeta, $pole)){
-			push(@poleslist, $pole);
-		}
-	}
-	if(scalar(@poleslist) == 0){
-		return 0;
-	}
-	#loops through all facets, checks if their candidate pole is one of the poles 
-	#if it is, computes contribution 
-	#if contribution is positive, removes corresponding poles
-	pArr(\@poleslist);
-	for my $f (@flist){
-		if (scalar(@{poleslist}) == 0){
-			return 0;
-		}
-		my @facet = @{$f};
-
-		my $tri = findTriangulated($diagram, $perturbed, \@facet)->[0];
-		my $num = exactCandidatePole($diagram, $tri);
-		my @matching_indices;
-		for my $i (0..(scalar(@{poleslist}) - 1)){
-			if (abs($num - $poleslist[$i]) < 0.000001){
-				push(@matching_indices, $i);
-			}
-		}
-		my $total = scalar(@matching_indices);
-		if ($total == 0){
-			next;
-		}
-		if (computeMultiplicity($diagram, \@facet) == 0){
-			next;
-		}
-		#removes the matching indices
-		for my $i (0..($total - 1)){
-			splice(@poleslist, $matching_indices[$total - 1 - $i], 1);
-		}
-		pArr(\@poleslist);
-	}
-	if (scalar(@poleslist) == 0){
-		return 0;
-	}
-
-
-
-
-	print "Found counterexample!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
-	print($localzeta);
-	print "\n";
-	return 1;
-
-}
 
 #usage: exactCandidatePole($diagram, $facet)
 #diagram should be completely reduced 
@@ -609,12 +405,7 @@ sub rationalCanonicalMod1{
 	return canonicalMod1($real->[0]);
 }
 
-#usage: checkIfPoles($diagram, $array of rationals)
-#returns a 0/1 array, 1 if the corresponding rational is a pole, 0 if it is not 
-#more efficient that computing whole local zeta function hopefully
-sub checkIfPoles{
 
-}
 
 
 
@@ -667,299 +458,7 @@ sub integralP{
 	return $answer;
 }
 
-#usage: testGeneralConjecture($diagram)
-#takes a diagram, finds all B_1 facets
-#For each cluster of B_1 facets contributing the same candidate pole, checks if the cluster is coherent 
-#if the cluster is not coherent, then it should contribute an eigenvalue
-#if all the clusters are coherent, then the pole shouldn't be a pole 
-#only works for simplicial
-#checks all clusters, not just those consisting only of B_1 facets
-#returns 2 if eigenvalue side fails, 1 if pole side, 0 if both okay
-sub testGeneralConjecture{
-	my $diagram = shift;
-	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my @polestocheck;
-	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	for my $c (@clusters){
-		my $facets = $c;
-		my $pole = rationalCandidatePole($diagram, $facets->[0]);
-		if ($pole == -1){
-			next;
-		}
-		my $result = checkIfCoherent($diagram, $facets);
-		if ($result == 0){
-			my $essential = returnQ($diagram, 3, $facets->[0]);
-			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-				print "Contradiction to eigenvalue side with facet \n";
-				pArr($facets->[0]);
-				pArr(minCritFace($diagram, $facets->[0]));
-				return 2;
-			}
-		}
-		else{
-			push(@polestocheck, $pole);
-		}
 
-	}
-	my @allcoherent;
-	for my $pole (@polestocheck){
-		my @facets = @{allContributingCandidatePole($diagram, \@allfacets, $pole)};
-		if (checkIfCoherent($diagram, \@facets) != 0){
-			push(@allcoherent, $pole);
-		}
-	}
-	if (scalar(@allcoherent) > 0){
-		my $zeta = localZetaFunction($diagram);
-		for my $p (@allcoherent){
-			if (isPole($zeta, $p)){
-				print "Contradiction to pole side ", $p, "\n";
-				pArrArr(allContributingCandidatePole($diagram, \@allfacets, $p));
-				#pArr(minCritFace($diagram, \@{$contrib[0]}));
-				return 1;
-			}
-		}
-	}
-	return 0;
-}
-
-#useage: testCoherentPoleEigenvalue($diagram, c)
-#loops through clusters, checks each cluster if it is coherent, contributes a pole, and contributes an eigenvalue 
-#prints the result if the pole is fake, and the center has codimension c
-sub testCoherentPoleEigenvalue{
-	my $diagram = shift;
-	my $dim = scalar(@{$diagram->[0]});
-	my $c = shift;
-	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my @polestocheck;
-	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	my @centers = @{$centerclusters->[0]};
-	my $zeta = localZetaFunction($diagram);
-
-	for my $i (0..(scalar(@clusters) - 1)){
-		my $center = $centers[$i];
-		if (scalar(@{$center}) != $dim - $c){
-			next;
-		}
-		my $facets = $clusters[$i];
-		my $pole = rationalCandidatePole($diagram, $facets->[0]);
-		if ($pole == -1){
-			next;
-		}
-		if (isPole($zeta, $pole)){
-			next;
-		}
-		print "Center is: \n";
-		pArr($center);
-		print "Facets are: \n";
-		pArrArr($facets);
-		my $result = checkIfCoherent($diagram, $facets);
-		if ($result == 0){
-			print "Cluster is coherent \n";
-		}
-		else{
-			print "Cluster is not coherent \n";
-		}
-		my $essential = returnQ($diagram, 3, $facets->[0]);
-		if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-			print "Eigenvalue does not contribute \n";
-			
-		}
-		else{
-			print "Eigenvalue contributes \n";
-		}
-		print "Pole is fake \n";
-
-
-
-	}
-
-}
-
-sub testEigenvalueCoherent{
-	my $diagram = shift;
-	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my @polestocheck;
-	#my @b1s = @{returnB1Facet($diagram, $subdiv)};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	for my $c (@clusters){
-		my $facets = $c;
-		my $pole = rationalCandidatePole($diagram, $facets->[0]);
-		if ($pole == -1){
-			next;
-		}
-		my $result = checkIfCoherent($diagram, $facets);
-		if ($result == 0){
-			my $essential = returnQ($diagram, 3, $facets->[0]);
-			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-				print "Contradiction to eigenvalue side with facet \n";
-				pArrArr($facets);
-				pArr(minCritFace($diagram, $facets->[0]));
-				return 2;
-			}
-		}
-
-	}
-	return 0;
-}
-
-
-#usage; testELTCoherentFake($diagram)
-#checks every cluster of facets
-#looks for facets that are [ELT] coherent but have a real pole 
-#fake apices with a real pole 
-#unexpected fake poles 
-#counterexamples to the eigenvalue side 
-#doesn't work well if multiple clusters contribute the same pole 
-#returns 1 if the pole is unexpectly fake or the eigenvalue unexpectly fails to contribute
-#returns 2 if the pole is unexpectly real
-#incorporates the cd1 conjecture 
-sub testELTCoherentFake{
-	my $diagram = shift;
-	my $dim = scalar(@{$diagram->[0]});
-	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	my @centers = @{$centerclusters->[0]};
-	my $zeta = localZetaFunction($diagram);
-	my $bad = 0;
-	for my $i (0..(scalar(@clusters) - 1)){
-		my $center = $centers[$i];
-
-		my $facets = $clusters[$i];
-		my $pole = rationalCandidatePole($diagram, $facets->[0]);
-		if ($pole == -1){
-			next;
-		}
-		#checks for multiple clusters 
-		my $allcontributing = allContributingFacets($diagram, \@allfacets, $pole);
-		if (scalar(@{$allcontributing}) > scalar(@{$facets})){
-			next;
-		}
-		#does the cd 1 case 
-		if (scalar(@{$center}) == ($dim - 1)){
-			my $yesorno = isPole($zeta, $pole);
-			testCD1Conjecture($diagram, $center, $facets, $yesorno, $subdiv);
-			next;
-		}
-
-		my $isELT = isELTCoherent($diagram, $facets);
-		my $hasapex = hasFakeUniqueApex($diagram, [$center, $facets]);
-		if (($isELT == 0) and (scalar(@{$hasapex}) == 0)){
-			#in this case pole should be real, eigenvalue should be real
-			if (not isPole($zeta, $pole)){
-				pArrArr($facets);
-				print "Pole is fake \n";
-				$bad = 1;
-			}
-			my $essential = returnQ($diagram, 3, $facets->[0]);
-			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-				pArrArr($facets);
-				print "Eigenvalue does not contribute \n";
-				$bad = 1;
-			}
-
-		}
-
-		else{
-			#pole should be fake, eigenvalue couold be real or fake
-			if (isPole($zeta, $pole)){
-				if (not ($isELT == 0)){
-					pArrArr($facets);
-					print "Counterexample to [ELT] \n";
-					$bad = 2;
-				}
-				if (not scalar(@{$hasapex}) == 0){
-					pArrArr($facets);
-					print "Real pole even though fake apex \n";
-					$bad = 2;
-				}
-			}
-		}
-
-
-
-
-	}
-	if ($bad == 1){
-		return 1;
-	}
-	if ($bad == 2){
-		return 2;
-	}
-	return 0;
-
-}
-
-#usage: testOperativeConjecture($diagram)
-#tests the conjecture that the existence of an operative labeling determines if a pole is fake
-#doesn't work well if multiple clusters contribute the same pole 
-
-sub testOperativeConjecture{
-	my $diagram = shift;
-	my $dim = scalar(@{$diagram->[0]});
-	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	my @centers = @{$centerclusters->[0]};
-	my $zeta = localZetaFunction($diagram);
-	my $bad = 0;
-	for my $i (0..(scalar(@clusters) - 1)){
-		my $center = $centers[$i];
-
-		my $facets = $clusters[$i];
-		my $pole = rationalCandidatePole($diagram, $facets->[0]);
-		if ($pole == -1){
-			next;
-		}
-		#checks for multiple clusters 
-		my $allcontributing = allContributingFacets($diagram, \@allfacets, $pole);
-		if (scalar(@{$allcontributing}) > scalar(@{$facets})){
-			next;
-		}
-		#eigenvalue should be real in the following case
-		if (checkForOperative($diagram, $subdiv, $center) == 0){
-			if (not isPole($zeta, $pole)){
-				pArrArr($facets);
-				print "Pole is fake \n";
-				$bad = 1;
-			}
-			my $essential = returnQ($diagram, 3, $facets->[0]);
-			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-				pArrArr($facets);
-				print "Eigenvalue does not contribute, operative conjecture is wrong \n";
-				$bad = 1;
-			}
-
-		}
-		else{
-			#pole should be fake, eigenvalue couold be real or fake
-			if (isPole($zeta, $pole)){
-				pArrArr($facets);
-				print "Pole should be fake but is not \n";
-				$bad = 2;
-			}			
-		}
-	}
-	if ($bad == 1){
-		return 1;
-	}
-	if ($bad == 2){
-		return 2;
-	}
-	return 0;
-
-
-}
 
 #usage: makeArrayRational(array)
 #turns it into a polymake rational vector
@@ -977,9 +476,11 @@ sub integralPExplicit{
 	my $primitive = subdivideCone($rays);
 	my $answer = new UniPolynomial("0");
 	for my $tri (@{$primitive}){
+		pArr($tri);
 		my @subdividedrays = map($rays->[$_], @{$tri});
 		my @prim = map(changeToPrimitive(makeArrayRational($_)), @subdividedrays);
 		my $mult = multiplicityArray(\@prim);
+		print "Multiplicity is $mult \n";
 		my $trianglecontrib = new UniPolynomial($mult);
 		for my $p (@prim){
 			my $pairing = dotProduct($vertex, $p);
@@ -987,6 +488,8 @@ sub integralPExplicit{
 			my $contrib = new UniPolynomial("$pairing*x + $v");
 			$trianglecontrib = $trianglecontrib/$contrib;
 		}
+		print $trianglecontrib;
+		print "\n";
 		$answer = $answer + $trianglecontrib;
 	}
 	return $answer;
@@ -1021,133 +524,273 @@ sub faceToCone{
 		if ($bad == 1){
 			next;
 		}
-		push(@cone, $r)		
+		push(@cone, changeToPrimitive($r));		
 	}
 	return \@cone;
 }
 
 
 
-#usage: testConversionStrategy($diagram, $subdiv, $center, cluster)
-#if there is no operative labeling, returns -1
-#otherwise, choses an operative labeling 
-#this should be the only cluster contributing the candidate pole 
-#arranges all terms contributing the candidate pole so that they are integrals 
-#over certain maximal cones 
-#then checks if it is okay to swap the vertex they are integrating against
-#returns 0 if everything is as expected 
-#returns 1 if not
-sub testConversionStrategy{
+
+#usage: integrateCone(diagram, integrating vertex (apex), base 1, base 2, base direction)
+#[base1, base2] should be an edge 
+#integrates exp(-<x (IV) + \one, u)du over Conv(dual cone to edge, base direction)
+sub integrateCone{
 	my $diagram = shift;
 	my $dim = scalar(@{$diagram->[0]});
-	my $subdiv = shift;
-	my $center = shift;
-	my $facets = shift;
-	if (scalar(@{$facets}) == 1){
-		return 0;
-	}
-	my $pole = rationalCandidatePole($diagram, $facets->[0]);
-	if ($pole == -1){
-		return 0;
-	}
-	my $allcontributing = allContributingFacets($diagram, \@{$subdiv->FACETS}, $pole);
-	if (scalar(@{$allcontributing}) > scalar(@{$facets})){
-		return 0;
-	}
-	my @clusterfaces = @{getAllClusterFaces($subdiv, $center)};
-	my $num = scalar(@clusterfaces) - 1;
+	my $IV = shift;
+	my $BV1 = shift;
+	my $BV2 = shift;
+	my $B1direction = shift;
 	my $fan = dualFan($diagram);
 	my @rays = @{$fan->RAYS};
-	#center is the last face 
-	my @labeling;
-	#faces are labeled in the same order as @clusterfaces 
-	for my $face (@clusterfaces){
-		my @uniques = @{returnUniqueApex($diagram, $face)};
-		if (scalar(@uniques) == 0){
-			return -1;
-		}
-		#chooses random unique apex
-		my $random = int(scalar(@uniques)*rand);
-		push(@labeling, $uniques[$random]);
-	}
-	my $minlabeling = $labeling[$num];
-	#finds all vertices that contribute
-	my $lc = List::Compare->new(@{$facets});
-	my @verts = $lc->get_union;		
+	my $cone = faceToCone($diagram, [$BV1, $BV2], \@rays);
+	my @otherray = (0) x $dim;
+	$otherray[$B1direction] = 1;
+	push(@{$cone}, \@otherray);
+	return integralPExplicit($cone, $diagram->[$IV]);
 
-	#for each face, finds the minimal face that contains it 
-	#uses the @clusterfaces is ordered by decreasing size
-	for my $v (@verts){
-		if ($v == $minlabeling){
+}
+
+#usage: lookForType11($diagram)
+#returns 1 if it has a face of type (1,1,1)
+#returns 0 otherwise
+sub lookForType11{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = diagramToSubdiv($diagram);
+	my $clusters = sortIntoClusters($diagram, \@{$subdiv->FACETS});
+	my $centers = $clusters->[0];
+	for my $c (@{$centers}){
+		if (scalar(@{$c}) != $dim - 2){
 			next;
 		}
-		my $assocface = [];
-		my $label = -1;
-		for my $i (0..$num){
-			if (is_subset($clusterfaces[$i], [$v])){
-				$assocface = $clusterfaces[$i];
-				$label = $labeling[$i];
-			}
-		}
-		#automatically okay if label is the minimal label
-		if ($label == $minlabeling){
-			next;
-		}
-		#finds the direction in which the apex is B_1
-		my $B1direction = -1;
-		for my $direction (0..($dim - 1)){
-			if ($diagram->[$label]->[$direction] != 1){
-				next;
-			}
-			my $sum = 0;
-			for my $fvert (@{$assocface}){
-				$sum += $diagram->[$fvert]->[$direction];
-			}
-			if ($sum == 1){
-				$B1direction = $direction;
-				last;
-			}
-		}
-		#print $B1direction;
-		#finds rays of the cone
-		#does this by looping over all rays, checking if they have same value on $v and $label
-		my @raysofcone = @{faceToCone($diagram, [$v, $label], \@rays)};
-		#adds the e_{B1directioin} ray 
-		my @otherray = (0) x $dim;
-		$otherray[$B1direction] = 1;
-		push(@raysofcone, \@otherray);
-		#@raysofcone = map(vectorToArray($_), @raysofcone);
-		#pArrArr(\@raysofcone);
-		#compares the integrals 
-		my $Inormal = integralPExplicit(\@raysofcone, $diagram->[$label]);
-		my $Iminimal = integralPExplicit(\@raysofcone, $diagram->[$minlabeling]);
-		if (isPole($Inormal - $Iminimal, $pole)){
-			print "Counterexample found \n";
-			print "Vertex is ", $v, "\n";
-			print "Apex is ", $label, "\n";
-			print "Direction is ", $B1direction, "\n";
+		if (scalar(@{returnUniqueApex($diagram, $c)}) == 3){
+			pArr($c);
 			return 1;
 		}
 	}
-
 	return 0;
 }
 
-#usage: testAllClusters($diagram)
-#tests all the clusters to see if the conversion stategy works 
-sub testAllClusters{
+
+sub findLinkSize{
 	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
 	my $subdiv = diagramToSubdiv($diagram);
-	my @allfacets = @{$subdiv->FACETS};
-	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
-	my @clusters = @{$centerclusters->[1]};
-	my @centers = @{$centerclusters->[0]};
-	for my $i (0..(scalar(@clusters) - 1)){
-		if (testConversionStrategy($diagram, $subdiv, $centers[$i], $clusters[$i]) == 1){
-			pArr($centers[$i]);
+	my $clusters = sortIntoClusters($diagram, \@{$subdiv->FACETS});
+	my $centers = $clusters->[0];
+	for my $c (@{$centers}){
+		if (scalar(@{$c}) != $dim - 2){
+			next;
+		}
+		if (scalar(@{returnUniqueApex($diagram, $c)}) == 3){
+			my $link = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $c));
+			pArr($c);
+			print $link->N_VERTICES;
+			print "\n";
+			print $link->VERTEX_LABELS;
+			print "\n \n";
 		}
 	}
 }
+
+#usage: localZetaFunctionExplicit($diagram)
+#computes the topological local zeta function
+#for now only works for simplicial, because otherwise I need to do something more intelligent 
+#to compute the dim of a face
+#diagram must be reduced
+#prints out contribution of each face as it computes
+sub localZetaFunctionExplicit{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $poly = newtonPolyhedron($diagram);
+	my $facetList = facetList($poly, $diagram);
+	my $fan = fan::normal_fan($poly);
+	my $conehash = coneHash($facetList, $diagram);
+
+	my $zeta = new UniPolynomial("0");
+	my @rays = @{$fan->RAYS};
+	my @cones = @{allConesByDim($fan)};
+	my $factor = new UniPolynomial "x/(x + 1)";
+	my $pole = new Rational(-2);
+	#cdim + 1 = dimension of cone
+	#dimension of face = dim - cdim - 1
+	for my $cdim (0..($dim - 1)){
+		for my $cone (@{$cones[$cdim]}){
+			my @theserays = map(\@{$rays[$_]}, @{$cone});
+			my $face = coneToFace($conehash, \@{$cone});
+			#cones corresponding to non-compact faces
+			if (isBounded($face, $diagram) == 0){
+				next;
+			}
+
+			my $num = scalar(@{$face});
+
+			if ($num == 1){
+				my $t = totalContribution(\@theserays, $diagram);
+				if (isPole($t, $pole)){
+					pArr($face);
+					pArrArr(\@theserays);
+					print($t);
+					print "\n \n";
+				}
+				$zeta = $zeta + $t;
+
+			}
+			if ($num > 1){
+				my $contrib = totalContribution(\@theserays, $diagram);
+				my $fdim = $dim - $cdim - 1;
+				my @verts = map($diagram->[$_], @{$face});
+				my $coef = powMinusOne($fdim)*normalizedVolume(\@verts);
+				$zeta = $zeta + $factor*$coef*$contrib;
+				if (isPole($contrib, $pole)){
+					pArr($face);
+					pArrArr(\@theserays);
+					print($factor*$coef*$contrib);
+					print "\n \n";
+				}
+			}
+		}
+	}
+	return $zeta;
+}
+
+#usage: contribFromFlag($diagram, vertex, added vertices, maxapex, tuple of directions)
+#added vertices are max face -  min face
+#computes the corresponding integral 
+#directions are all directions of one of the faces in the flag, in order
+#directions should be 0-indexed
+sub contribFromFlag{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $vertex = shift;
+	my $added = shift;
+	my $maxapex = shift;
+	my $directions = shift;
+	my $fan = dualFan($diagram);
+	my @rays = @{$fan->RAYS};
+	#case when it contains the max apex
+	if ($vertex == $maxapex){
+		my $face = union([$vertex], $added);
+		my $cone = faceToCone($ex, $face, \@rays);
+		for my $i (0..(scalar(@{$directions}) - 2)){
+			my @otherdirection = (0) x $dim;
+			$otherdirection[$directions->[$i]] = 1;
+			push(@{$cone}, \@otherdirection);
+		}
+		return integralPExplicit($cone, $diagram->[$maxapex]);
+	}
+	my $face = union([$vertex], $added);
+	$face = union($face, [$maxapex]);
+	my $cone = faceToCone($ex, $face, \@rays);
+	for my $i (0..(scalar(@{$directions}) - 1)){
+		my @otherdirection = (0) x $dim;
+		$otherdirection[$directions->[$i]] = 1;
+		push(@{$cone}, \@otherdirection);
+	}
+	pArrArr($cone);
+	return integralPExplicit($cone, $diagram->[$maxapex]);
+
+}
+
+
+
+#usage: contribFromFlagOtherVertex($diagram, vertex, added vertices, maxapex, tuple of directions, $IV)
+#added vertices are max face -  min face
+#computes the corresponding integral 
+#directions should be 0-indexed
+#IV is the integrating vertex
+sub contribFromFlagOtherVertex{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $vertex = shift;
+	my $added = shift;
+	my $maxapex = shift;
+	my $directions = shift;
+	my $IV = shift;
+	my $fan = dualFan($diagram);
+	my @rays = @{$fan->RAYS};
+	#case when it contains the max apex
+	if ($vertex == $maxapex){
+		my $face = union([$vertex], $added);
+		my $cone = faceToCone($diagram, $face, \@rays);
+		for my $i (0..(scalar(@{$directions}) - 2)){
+			my @otherdirection = (0) x $dim;
+			$otherdirection[$directions->[$i]] = 1;
+			push(@{$cone}, \@otherdirection);
+		}
+		return integralPExplicit($cone, $diagram->[$IV]);
+	}
+	my $face = union([$vertex], $added);
+	$face = union($face, [$maxapex]);
+	my $cone = faceToCone($diagram, $face, \@rays);
+	for my $i (0..(scalar(@{$directions}) - 1)){
+		my @otherdirection = (0) x $dim;
+		$otherdirection[$directions->[$i]] = 1;
+		push(@{$cone}, \@otherdirection);
+	}
+	return integralPExplicit($cone, $diagram->[$IV]);
+
+}
+
+
+#usage: hasUniqueMinimalFace(diagram, facet)
+#returns 1 if the facet contains a unique minimal critical face 
+#returns 0 otherwise 
+#Only interesting if the facet is simplicial 
+sub hasUniqueMinimalFace{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my @spanning = subsets($facet, $dim);
+	my %hash;
+	for my $candidate(@spanning){
+		#checks if a given set of vertices are linearly independent
+		my @verts;
+		for my $i (@{$candidate}){
+			push(@verts, $diagram->[$i]);
+		}
+		my $m = new Matrix<Integer>(\@verts);
+		if (common::det($m) == 0){
+			next;
+		}
+		my $mincrit = minCritFace($diagram, $candidate);
+		my $str = "@{$mincrit}";
+		if (not $hash{$str}){
+			$hash{$str} = 1;
+		}
+	}
+	if (scalar keys %hash > 1){
+		print "Found counterexample \n";
+		pArrArr($diagram);
+		pArr($facet);
+		return 1;
+	}
+	return 0;	
+}
+
+#usage: checkDiagramForUniqueMinimalFace($diagram)
+#checks all non-simplicial facets to see if they have a unique minimal face
+sub checkDiagramForUniqueMinimalFace{
+	my $diagram = shift;
+	my $poly = nonSimpDiagramToSimp($diagram);
+	my $facets = $poly->FACETS;
+	my $dim = scalar(@{$diagram->[0]});
+	for my $f (@{$facets}){
+		if (scalar(@{$f}) == $dim){
+			next;
+		}
+		print "found nonsimp";
+		hasUniqueMinimalFace($diagram, \@{$f});
+	}
+}
+
+
+
+
+
+
 
 
 

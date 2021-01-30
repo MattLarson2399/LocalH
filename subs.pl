@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #Contributors: Jason Schuchardt and Matt Larson
-#Last updated: 08/30/2020
+#Last updated: 01/29/2021
 
 #contains various useful scripts
 #does not have specific things designed to test specific conjectures
@@ -17,48 +17,12 @@ use Algorithm::Combinatorics "subsets";
 use PDL;
 use PDL::Matrix;
 use PDL::MatrixOps;
-#use Math::Matrix;
 
+script("/Users/matthew/Desktop/Local_Zeta_Function/code/utilities.pl");
 
-#usage: cartesian_product(AoA)
-#returns all pairs 
-#not: don't input a reference 
-sub cartesian_product {
-	reduce {
-    	[ map {
-    		my $item = $_;
-    		map [ @$_, $item ], @$a
-    	} @$b ]
-	} [[]], @_
-}
-
-
-#usage: round(number)
-#round to the nearest integer
-sub round{
-	my $float = shift;
-	my $rounded = int($float + $float/abs($float*2 || 1));
-}
-
-#usage: entrywiseEquality($aref, $aref);
-#returns 1 if the array are the same size and have every entry equal
-#returns 0 otherwise
-#arrays must be arrays of numbers or strings
-sub entrywiseEquality{
-	my $a = shift;
-	my @a = @{$a};
-	my $b = shift;
-	my @b = @{$b};
-	if (scalar(@a) != scalar(@b)){
-		return 0;
-	}
-	for my $i (0..scalar(@a) - 1){
-		if ($a[$i] != $b[$i]){
-			return 0;
-		}
-	}
-	return 1;
-}
+#this file contains general operations with subdivisions and for computing with local h
+#and Newton polyhedra 
+#One needs to be very careful when working with non-simplicial subdivisions 
 
 
 #useage: standard_simplex_vertices(n);
@@ -85,23 +49,6 @@ sub standard_simplex_vertices {
     return \@vert_arr;
 }
 
-#prints an array in a nice way
-#useage: pArr($aref), where $aref is a reference to an array
-sub pArr {
-    my $aref = shift;
-    print "[",join(", ",@{$aref}),"]\n";
-}
-
-#prints an array of arrays in a nice way
-#usage: pArrArr($p), $p is a reference an array of references to arrays
-sub pArrArr {
-    my $aref = shift;
-    print "[\n";
-    for my $arrRef (@$aref) {
-        print "[",join(", ",@{$arrRef}),"]\n";
-    }
-    print "]\n";
-}
 
 
 sub standard_simplex {
@@ -148,46 +95,7 @@ sub restriction {
 }
 
 
-#power set
-#note: takes array, returns array
-sub subarrs {
-    #if the input array is 0 return the empty list
-    if (scalar(@_) == 0) {
-        return ([]);
-    }
-    my $first = shift;
-    my @rec = subarrs(@_);
-    my @recp = map { my @temp = @{$_}; unshift @temp, $first; \@temp; } @rec;
-    push(@rec, @recp);
-    return @rec;
-}
 
-
-#returns 1 if n is even, -1 if n is odd
-#i.e. (-1)^n 
-#usage: powMinusOne(n);
-sub powMinusOne {
-    my $n = shift;
-    if($n % 2) {
-        return -1;
-    }
-    return 1;
-}
-
-
-#adds a number to the ith index of an array
-#usage: addToIndex($aref, $i, $val)
-#does not return anything, just modifies the array
-#adds $val to ith spot in the array
-sub addToIndex {
-    my $aref = shift;
-    my $i = shift;
-    my $val = shift;
-    if (not defined $aref->[$i]) {
-        $aref->[$i]=0;
-    }
-    $aref->[$i] = $aref->[$i] + $val;
-}
 
 
 #finds all integral points on n*standard (dim - 1) simplex
@@ -255,15 +163,7 @@ sub getBoundaryNRationalPoints {
 
 
 
-#returns a random vector of size $n with entries between 0 and 1
-sub getRandomVector {
-    my $len = shift;
-    my @ans = ();
-    for my $i (1..$len) {
-        push(@ans, rand());
-    }
-    return \@ans;
-}
+
 
 #converts to Barycentric coords by normalizing so that the sum is 1
 sub toBarycentricCoords {
@@ -302,22 +202,12 @@ sub totallyRandomRegularSubdivOfStandardSimplex {
     return regularSubdivisionOfStandardSimplex($coordsRef, $weightsRef);
 }
 
-#returns the sum of an array
-#usage: sumArray(reference to array)
-sub sumArray {
-	my $arref = shift;
-	my @array = @{$arref};
-	my $sum = 0;
-	my $size = scalar @array;
-	for my $i (0..($size - 1)){
-		$sum += $array[$i];
-	}
-	return $sum;
-}
+
 
 
 
 # computes as alternating sum of H_VECTORs
+#not fastest, relativeLocalH is faster
 sub local_h {
     my $subdiv = shift; # subdivision of a standard simplex of the appropriate dimension
     my $n = $subdiv->DIM;
@@ -340,7 +230,7 @@ sub local_h {
 
 
 #usage: isCone(subdivision)
-#checks if the subdivision is a cone over a face
+#checks if the entire subdivision is a cone over a face
 sub isCone {
 	#print "isCone start";
     my $subdiv = shift;
@@ -388,38 +278,6 @@ sub printSubdiv {
 		print "$i: ";
 		pArr($subdiv->COORDINATES->[$subdiv->VERTEX_INDICES->[$i]]);
 	}
-}
-
-#usage: randomSubArray($array reference, size of desired subarray)
-#generates a random sub array of the disired size
-sub randomSubArray{
-	my $aref = shift;
-	my @array = @{$aref};
-	my @shuffled = shuffle(@array);
-	my $num = shift;
-	if (scalar(@array) < $num) {
-		return "Error: array too small"
-	}
-	my @new = @shuffled[0 .. $num - 1];
-	return \@new;
-}
-
-#usage: union($aref1, $aref2)
-#returns a reference to the union of the two arrays
-#the arrays are distinct even if the entries are the same
-sub union{
-	my @a = @{shift @_};
-	my @b = @{shift @_};
-	my %union =  ();
-
-	foreach my $e (@a) { $union{$e} = 1 }
-	
-	foreach my $e (@b) {
-	    if ( not $union{$e} ) 
-    		{ $union{$e} = 1}
-    	}
-    my @union = keys %union;
-	return \@union;
 }
 
 
@@ -476,7 +334,7 @@ sub generateABunchQuick{
 
 
 #usage: countDuplicates(Array of subdivisions, as geometric simplicial complices)
-#returns the number of order pairs where the underlying abstract simplicial complexes are isomorphic
+#returns the number of ordered pairs where the underlying abstract simplicial complexes are isomorphic
 sub countDuplicates{
 	my $dupes = 0;
 	my $aref = shift;
@@ -503,19 +361,6 @@ sub countDuplicates{
 
 
 
-#usage: vanishes($arref)
-#returns an arref containing the places where the input is 0
-sub vanishes{
-	my $aref = shift;
-	my @array = @{$aref};
-	my @vanishing = ();
-	for my $i (0 .. scalar(@array) - 1){
-		if ($array[$i] == 0){
-			push(@vanishing, $i)
-		}
-	}
-	return \@vanishing;
-}
 
 #usage: vectorToArray($vector)
 #returns reference to array of that vector
@@ -644,6 +489,7 @@ sub carrier{
 
 #usage: excess(subdivision, array of vertices of the subdivision)
 #returns the excess of the face
+#i.e. the dimension of the carrier - dim face
 sub excess{
 	my $subdiv = shift;
 	my $dim = $subdiv->DIM;
@@ -670,54 +516,6 @@ sub reindex{
 	return \@output
 }
 
-#usage: relativeLocalH($subdiv, $E)
-#computes relative local h
-#face needs to be in increasing order
-sub relLocalH{
-	my $subdiv = shift;
-	my $n = $subdiv->DIM;
-	my $E = shift;
-	my $lh = new UniPolynomial("0*x");
-    my @E = @{$E};
-    my $sizeE = scalar(@E);
-    my $E_set = new Set<Int>(@E);
-    my $link;
-    if ($sizeE == 0){
-    	$link = $subdiv;
-        }
-    else{
-    	$link = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $E));
-    }
-    #creates array of the faces
-    my $diagram = $link->HASSE_DIAGRAM;
-    my $face_list = $diagram->FACES;
-    my @face_list = @{$face_list};
-    shift(@face_list);
-    my @face_list2 = map(vectorToArray($_), @face_list);
-    my @face_list3 = map(reindex($link, $_), @face_list2);
-    #sums over faces using excess formula
-    for my $face (@face_list3){
-    	my $ex = excess($subdiv, union($E, $face));
-    	my $sign = powMinusOne($n + 1 - scalar(@{$face}) - $sizeE);
-    	my $p = new UniPolynomial("($sign)*((x-1)^($ex))*(x^($n + 1 - $sizeE - $ex))");
-    	$lh = $lh + $p;
-    }
-    #need to extract coefficients in a good way
-    #print $lh, "\n";
-    my $dumb = new UniPolynomial("1 - x^($n + 2 - $sizeE)");
-    my $dumb2 = new UniPolynomial("1 - x");
-    my $dumb3 = numerator($dumb/$dumb2);
-    $lh = $lh + $dumb3;
-    my $temp_vec = $lh->coefficients_as_vector;
-    my $ordering = $lh->monomials_as_vector;
-    my @ans;
-    for my $j (0..($temp_vec->dim - 1)){
-    	$ans[$ordering->[$j]] = ($temp_vec->[$j] - 1);
-    }
-    return \@ans;
-
-
-}
 
 #usage: checkMaximalFace(complex, arref of vertices of a facet)
 #checks if a codimension 1 face of the maximal face has excess 0
@@ -738,7 +536,7 @@ sub checkMaximalFace{
 }
 
 #usage: checkAllMaximalFaces(subdivision)
-#checks if all maximal faces are a pyramid
+#checks if all maximal faces are pyramids 
 sub checkAllMaximalFaces{
 	my $subdiv = shift;
 	my $flist = $subdiv->FACETS;
@@ -772,27 +570,6 @@ sub reindexIndices{
 
 
 
-#usage: isUnimodal(arref);
-#checks if a SYMMETRIC array is unimodal
-#returns 0 if it is not unimodal
-sub isUnimodal{
-	my $aref = shift;
-	my @array = @{$aref};
-	my $size = scalar(@array);
-	my $num;
-	if ($size % 2 == 0){
-		$num = $size/2;
-	}
-	else{
-		$num = ($size - 1)/2;
-	}
-	for my $i (0..$num - 1){
-		if ($array[$i] > $array[$i + 1]){
-			return 0;
-		}
-	}
-	return 1;
-}
 
 
 
@@ -809,23 +586,6 @@ sub returnNonPyramidalFaces{
 		}
 	}
 	return(\@flist);
-}
-
-#usage: removeDuplicates(AoA)
-#takes an array of arrays of numbers
-sub removeDuplicates{
-	my $aoa = shift;
-	my @aoa = @{$aoa};
-	my %hash;
-	my @result = ();
-	for my $v (@aoa){
-		my $str = "@{$v}";
-		if (not $hash{$str}){
-			$hash{$str} = 1;
-			push(@result, $v);
-		}
-	}
-	return \@result;
 }
 
 
@@ -863,37 +623,9 @@ sub isFace{
 }
 
 
-#usage: printLocalHCarrier($subdiv)
-#takes a subdivisions, finds all non-pyramidal facets
-#prints computes the carrier, prints local h
-sub printLocalHCarrier{
-	my $subdiv = shift;
-	my $flist = returnNonPyramidalFaces($subdiv);
-	my @flist = @{$flist};
-	my @toconsider = ();
-	for my $j (0..scalar(@flist) - 1){
-		#creates array of faces, gets rid of the empty set and whole facet
-		my @facet = @{$flist[$j]};
-		my @faces = subarrs(@facet);
-		shift(@faces);
-		pop(@faces);
-		push(@toconsider, @faces);
-	}
-	my @f = @{removeDuplicates(\@toconsider)};
-	for my $face (@f){
-		if (scalar(@{$face}) + excess($subdiv, $face) - 1 < $subdiv->DIM - 1){
-			print "On face: "; 
-			pArr($face);
-			print "The carrier has dimension ", (scalar(@{$face}) + excess($subdiv, $face) - 1), " local h is ";
-			pArr(relativeLocalH($subdiv, $face));
-
-			}
-		}
-	
-}
 #usage: relativeLocalH(subdivision, facet)
 #computes relative local h as a sum of alternating h-vectors
-#hopefully much faster
+#faster than local_h
 sub relativeLocalH{
 	my $subdiv = shift;
     my $n = $subdiv->DIM;
@@ -950,57 +682,6 @@ sub relativeLocalH{
     return $ans;
 }
 
-#usage: is_subset(sorted list, sorted list)
-#checks if the second list is a subset of the first
-#returns 1 if it is in the sublists
-#returns 0 if it is not
-#must be sorted!
-sub is_subset{
-	my @list = @{shift @_};
-	my @sublist = @{shift @_};
-	if (scalar(@sublist) == 0){
-		return 1;
-	}
-	my $index = 0;
-	for my $j (0..scalar(@list) - 1){
-		if ($list[$j] > $sublist[$index]){
-			return 0
-		}
-		elsif ($list[$j] == $sublist[$index]){
-			$index += 1;
-			if ($index == scalar(@sublist)){
-				return 1;
-			}
-		}
-	}
-}
-
-#usage: is_subset( list,  list)
-#checks if the second list is a subset of the first
-#returns 1 if it is in the sublists
-#returns 0 if it is not
-#sorts the lists initially
-sub is_subset_unsorted{
-	my @list = @{shift @_};
-	@list = sort {$a <=> $b} @list;
-	my @sublist = @{shift @_};
-	@sublist = sort {$a <=> $b} @sublist;
-	if (scalar(@sublist) == 0){
-		return 1;
-	}
-	my $index = 0;
-	for my $j (0..scalar(@list) - 1){
-		if ($list[$j] > $sublist[$index]){
-			return 0
-		}
-		elsif ($list[$j] == $sublist[$index]){
-			$index += 1;
-			if ($index == scalar(@sublist)){
-				return 1;
-			}
-		}
-	}
-}
 
 #usage: excessInternalFaces($subdiv, k, l)
 #returns the excess of all the l-faces of the internal k-skeleton
@@ -1261,23 +942,25 @@ sub shiftToInfinity{
 	my @v2 = (1) x ($dim);
 	$v2[$dim - 1] = 0;
 	push(@mat, \@v2);
-	my $trans = pdl(\@mat);
+	#my $trans = pdl(\@mat);
+	my $trans = new Matrix <Rational>(\@mat);
 
 	#applies the transformation
 	my @output = ();
 	for my $i (0..scalar(@points) - 1){
-		my $pvecT = pdl $points[$i];
-		my $pvec = pdl $pvecT->transpose;
-		my $res = $trans x $pvec;
-		my @result = $res->list;
-		push(@output, \@result);
+		#my $pvecT = pdl $points[$i];
+		#my $pvec = pdl $pvecT->transpose;
+		my $vec = new Vector<Rational>($points[$i]);
+		my $res = $trans*$vec;
+		#my @result = $res->list;
+		push(@output, $res);
 		
 	}
 	return \@output;
 }
 #usage: deProjective(AoA)
 #takes an array of arrays, scales so that the last coordinant is 1
-#the removes the last coordinant
+#then removes the last coordinant
 sub deProjective{
 	my @points = @{shift @_};
 	my $dim = scalar(@{$points[0]});
@@ -1285,6 +968,10 @@ sub deProjective{
 	for my $i (0.. scalar(@points) - 1){
 		my @vec = ();
 		for my $j (0..$dim - 2){
+			if ($points[$i]->[$j] == 0){
+				$vec[$j] = 0;
+				next;
+			}
 			$vec[$j] = new Rational ($points[$i]->[$j])/($points[$i]->[$dim - 1]);
 		}
 		push(@output, \@vec);
@@ -1339,35 +1026,6 @@ sub diagramToSubdiv{
 
 }
 
-#usage: nonSimpDiagramToSubdiv(AoA)
-#treats the array of arrays as an array of points
-#all points should have the same dimension, should include the standard basis vectors (must be convenient)
-#does not check if the subdivision is a triangulation
-#should only be used for non-simplicial stuff
-sub nonSimpDiagramToSubdiv{
-	my $diagram = shift;
-	my $proj = toProjectiveArray($diagram);
-	my $shifted = shiftToInfinity($proj);
-	my @new = @{deProjective($shifted)};
-	#points are now in the form (points in simplex in R^d, weight)
-	my @weighvec = ();
-	for my $i (0.. scalar(@new) - 1){
-		$weighvec[$i] = pop(@{$new[$i]});
-	}
-	my $coords = toStandard(\@new);
-	my @baryCoords = map(toBarycentricCoords($_), @{$coords});
-	@baryCoords = @{toProjectiveArray(\@baryCoords)};
-
-	my $dim = scalar(scalar(@{$diagram->[0]}));
-	my $weightsRef = new Vector<Rational>(\@weighvec);
- 	my $baryMat=new Matrix<Rational>(\@baryCoords);
- 	my $fan = new fan::SubdivisionOfPoints(POINTS=>$baryMat, WEIGHTS=>$weightsRef);
- 	my $complex = $fan->POLYHEDRAL_COMPLEX;
-    #my $subdiv = new topaz::GeometricSimplicialComplex(COORDINATES=>$baryMat, 
-    #	INPUT_FACES=>regular_subdivision($baryMat, $weightsRef));
-    return $complex;
-
-}
 
 #usage: nonSimpDiagramToSimp(AoA)
 #treats the array of arrays as an array of points
@@ -1462,6 +1120,7 @@ sub returnQ{
 	}
 	return \@Q;
 }
+
 #usage: posNegDecomp($diagram, $facet)
 #expresse (1,...,1) as a linear combination of vertices in the facet
 #returns AoA of the vertices that are not in Q that are positive and the vertices that are non-positive
@@ -1536,153 +1195,13 @@ sub returnLinearExpression{
 	return \@res;
 
 }
-#usage: checkFacet($diagram, $subdivision, facet)
-#input the diagram as an AoA
-#input the associated subdivision
-#input a facet of the subdivision - input as numbers between 0 and n
-#computes where (1,1,,1) lands
-#computes relative local $h$
-#returns an array with relative local h and the codimension of the carrier
-#Must be reduced!
-sub checkFacet{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my $facet = shift;
-	my $dim = scalar(@{$facet}) - 1;
-	#creates AoA of the coordinants of of P
-	my @coords = ();
-	for my $i (0..$dim){
-		push(@coords, $diagram->[$facet->[$i]]);
-	}
-	#now we find where (1,1,..,1) lands
-	#to do this, solve Ax = b, b = (1,1..,1), A = matrix whose rows are the coordinant vectors of the face
-	#The entries that are integers is what we care about
-	#first creates (1,1,,1)
-	my @row = (1) x ($dim + 1);
-	my $r = pdl[\@row];
-	my $target = $r->transpose;
-	#now creates the matrix of the coords
-	my $tpose = pdl[\@coords];
-	my $mat = $tpose->transpose;
-	my $inv = inv($mat);
-	my $res = $inv x $target;
-	#finds the non-zero entries, finds Q
-	my @Q = ();
-	my @res = $res->list;
-	for my $j (0..$dim){
-		if ((abs($res[$j] - round($res[$j])) > 0.00000001)){
-			push(@Q, $facet->[$j]);
-		}
-	}
-	#pArr(\@Q);
-	#print "Codimension is ", ($dim + 1 - ($dim + 1 - scalar(@{carrier($subdiv, \@Q)}))), "\n";
-	return (relativeLocalH($subdiv, \@Q), scalar(@{carrier($subdiv, \@Q)}));
-}
 
 
 
 
 
 
-#usage: gatherCDData($dim, iterations)
-#generates a bunch of random uniformRND($dim, 500, 10, 20)
-#find non-pyramidal facets
-#checks those facets
-sub gatherCDData{
-	my $dim = shift;
-	my $iter = shift;
-	my @codim = (0) x ($dim + 1);
-	my @localh = ();
-	for my $i (0..$iter){
-		my $diagram = uniformRND($dim, 10000, 15, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @npfacets = @{returnNonPyramidalFaces($subdiv)};
-		for my $facet (@npfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my @res = checkFacet($diagram, $subdiv, \@facet);
-			$codim[$res[1]] += 1;
-			if (sumArray($res[0]) == 0){
-				pArrArr($diagram);
-			}
-			if ($res[1] > 2){
-				push(@localh, $res[0]);
-			}
-		}
-	}
-	pArr(\@codim);
-	return \@localh
-}
 
-#usage: gatherCDDataSum($dim, iterations)
-#generates a bunch of random sumRND($dim, 500, 30, 20)
-#find non-pyramidal facets
-#checks those facets
-sub gatherCDDataSum{
-	my $dim = shift;
-	my $iter = shift;
-	my $none = 0;
-	my $nottry = 0;
-	my @codim = (0) x ($dim + 1);
-	my @localh = ();
-	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 10000, 15, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			$nottry++;
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @npfacets = @{returnNonPyramidalFaces($subdiv)};
-		if (scalar(@npfacets) == 0){
-			$none++;
-		}
-		for my $facet (@npfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			$codim[$cdim] += 1;
-			if ($cdim > 2){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					pArrArr($diagram);
-				}
-				push(@localh, $lh);
-			}
-		}
-	}
-	print "Number with no non-pyramidal facets is ", $none, "\n";
-	print "Number that are not triangulations is ". $nottry, "\n";
-	pArr(\@codim);
-	return \@localh
-}
-
-
-#usage: multiplicity($aref, $aref)
-#computes the multiplicity of a pair of integer vectors
-#i.e. computes the index of the lattice generated by the vectors in the group of all lattice points 
-#in the vector space spanned by the vectors
-#does this by taking the gcd of the determinants of the 2x2 minors
-sub multiplicity{
-	my @v1 = @{shift @_};
-	my @v2 = @{shift @_};
-	my @pairs = subsets([0..scalar(@v1)-1], 2);
-	my $gcd = new Integer abs($v1[0]*$v2[1] - $v2[0]*$v1[1]);
-	for my $sub(@pairs){
-		my $det = abs($v1[$sub->[0]]*$v2[$sub->[1]] - $v2[$sub->[0]]*$v1[$sub->[1]]);
-		my $toint = new Integer($det);
-		$gcd = gcd($gcd, $toint);
-		if ($gcd == 1){
-			last;
-		}
-	}
-	return $gcd;
-}
 
 #usage: removeRedundant(diagram, associated subdivision)
 #takes a diagram and the resuling subdivision, remove the points that don't contribute to the subdivision
@@ -1699,329 +1218,12 @@ sub removeRedundant{
 	return \@relevant_faces;
 }
 
-#usage: makePrimitive(array of integers)
-#array must be all integral
-#divides through by gcd of all entries
-#there are some issues with gcd and mod and data type, polymake has a built in gcd function
-sub makePrimitive{
-	my @vec = @{shift @_};
-#	#checks if integral
-#	my $int = 1;
-#	for my $i (0.. scalar(@vec) - 1){
-#		if ($vec[$i] != ceil($vec[$i])){
-#			$int = 0;
-#			last;
-#		}
-#	}
-#	if ($int == 0){
-#		my $num = 1;
-#		for my $i (0..scalar(@vec) - 1){
-#			$num = $num * denominator($vec[$i]);
-#		}
-#		@vec = map(($_) * $num, @vec);
-#	}
-	my $gcd = gcd($vec[0], $vec[1]);
-	for my $i (2..scalar(@vec) - 1){
-		$gcd = gcd($gcd, abs($vec[$i]));
-		if ($gcd == 1){
-			last;
-		}
-	}
-	my @result = map(new Rational($_/$gcd), @vec);
-	return \@result;
-}
 
 
-#usage(diagram, aref of facets)
-#for each facet, returns the primitive vector in the dual cone
-#must have no redundant points in the diagram
-sub primitiveDualVector{
-	my @diagram = @{shift @_};
-	my @flist = @{shift @_};
-	#converts to homogeneous coords by adding 1 to the start of everything
-	my @points = ();
-	for my $i (0..scalar(@diagram) - 1){
-		my @guy = (1);
-		push(@guy, @{$diagram[$i]});
-		push(@points, \@guy);
-	}
-	my $p = new Polytope(POINTS=>\@points);
-	my $facets = $p->FACETS;
-	#finds the indices of the facets I care about
-	my @labels = ();
-	my @facet_labels = @{$p->VERTICES_IN_FACETS};
-	my @AoAfacet_labels = map(vectorToArray($_), @facet_labels);
-	for my $face (@flist){
-		for my $i (0..scalar(@AoAfacet_labels) - 1){
-			if (entrywiseEquality($face, $AoAfacet_labels[$i])){
-				push(@labels, $i);
-			}
-		}
-	}
-	if(scalar(@labels) != scalar(@flist)){
-		print "Not simplicial";
-		return 1;
-	}
-	#finds the normal vector to each of the good facets
-	my @normals = ();
-	for my $i (0..scalar(@flist) - 1){
-		my @norm = @{$facets->[$labels[$i]]};
-		shift(@norm);
-		push(@normals, (\@norm));
-	}
-	return \@normals;
-}
 
-#usage: dot of two arrays
-#should be the same length
-#returns the dot product
-sub dot{
-	my @a = @{shift @_};
-	my @b = @{shift @_};
-	if (scalar @a != scalar @b){
-		print "Not same length";
-	}
-	my $sum = 0;
-	for my $i (0..scalar(@a) - 1){
-		$sum = $sum + $a[$i] * $b[$i];
-	}
-	return $sum;
-}
 
-#usage: LoeserConditionNPyramidal($diagram, $subdiv)
-#takes a diagram and an associated subdivisions
-#find the Non pyramidal faces
 
-sub LoeserConditionNPyramidal{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my $reduced = removeRedundant($diagram, $subdiv);
-	my @npfacets = map(vectorToArray($_), @{returnNonPyramidalFaces($subdiv)});
-	my @allfacets = map(vectorToArray($_), @{$subdiv->FACETS});
-	my @npdualvecs = @{primitiveDualVector($diagram, \@npfacets)};
-	my @dualvecs = @{primitiveDualVector($diagram, \@allfacets)};
 
-	for my $i (0..scalar(@npfacets) - 1){
-		pArr $npfacets[$i];
-		my $N = dot($npdualvecs[$i], $reduced->[$npfacets[$i]->[0]]);
-		my $nu = sumArray($npdualvecs[$i]);
-		my $thing = $nu/$N;
-
-		for my $j (0..scalar(@allfacets) - 1){
-			my $lc = List::Compare->new($allfacets[$j], $npfacets[$i]);
-			if ((scalar($lc->get_intersection) > 0) and (not entrywiseEquality($allfacets[$j], $npfacets[$i]))){
-				my $lambda = sumArray($allfacets[$j]) - $thing * dot($allfacets[$j], $reduced->[$allfacets[$j]->[0]]);
-				my $beta = multiplicity($npdualvecs[$i], $dualvecs[$j]);
-				if (denominator($lambda/$beta) == 1){
-					print scalar($lc->get_intersection);
-				}
-				#print "Currently on facet:";
-				#pArr $allfacets[$j];
-				#print "Lambda is ", $lambda, " Beta is ", $beta, " so mu is ", $lambda/$beta, "\n";
-			}
-		}
-	}
-
-}
-
-#checks the "topological pyramid implies lattice pyramids" conjecture
-
-sub checkAllFaces{
-	my $dim = shift;
-	my $iter = shift;
-	my $none = 0;
-	my $nottry = 0;
-	my @codim = (0) x ($dim + 1);
-	my @localh = ();
-	for my $i (0..$iter){
-		my $diagram = uniformRND($dim, 100, 10, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			$nottry++;
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @allfacets = @{$subdiv->FACETS};
-		if (scalar(@allfacets) == 1){
-			$trivial++;
-		}
-		for my $facet (@allfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			$codim[$cdim] += 1;
-			if ($cdim > 2){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					print "Found one \n";
-					pArr(\@facet);
-					pArr($Q);
-					pArrArr($diagram);
-				}
-				push(@localh, $lh);
-			}
-		}
-	}
-	print "Number which have a trivial subdivision is ", $none, "\n";
-	print "Number that are not triangulations is ". $nottry, "\n";
-	pArr(\@codim);
-	return \@localh
-}
-
-#usage: returnNLPyramids($diagram, $subdiv)
-#returns all the faces that are not lattice pyramids
-sub returnNLPyramids{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my $nfacets = $subdiv->N_FACETS;
-	my @NLs = ();
-	for my $i (0..$nfacets - 1){
-		my @facet = @{$subdiv->FACETS->[$i]};
-		if (not isLatticePyramid($diagram, \@facet)){
-			push(@NLs, \@facet);
-		}
-	}
-	return \@NLs;
-}
-
-#usage: returnNLPyramids($diagram, $subdiv)
-#returns an array containing all pyramidal facets that are not lattice pyramids
-#does this by itterating over the facets, finding all facets that aren't lattice pyramids and aren't non-pyramidal
-#diagram must be reduced
-sub returnNLPPyramids{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my $nfacets = $subdiv->N_FACETS;
-	my @NLs = ();
-	for my $i (0..$nfacets - 1){
-		my @facet = @{$subdiv->FACETS->[$i]};
-		if ((not isLatticePyramid($diagram, \@facet)) and (not checkMaximalFace($subdiv, \@facet))){
-			push(@NLs, \@facet);
-		}
-	}
-	return \@NLs;
-}
-
-#usage: nonLatticePyramid($dim, iter)
-#generates a random subdivision
-#itterates over the faces that aren't lattice pyramids
-#divides into non-pyramidal faces and NL pyramids
-#computes Q for the NL pyramids, returns an array 
-sub nonLatticePyramid{
-	my $dim = shift;
-	my $iter = shift;
-	my @dimQ = (0) x ($dim);
-	my @codim = (0) x ($dim);
-	my $numFacets = 0;
-
-	for my $i (0..$iter - 1){
-		my $diagram = sumRND($dim, 1000, 10, 20);
-
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @NLs = @{returnNLPPyramids($diagram, $subdiv)};
-		$numFacets += scalar(@NLs);
-		for my $face (@NLs){
-			my $Q = returnQ($diagram, $subdiv, $face);
-			#pArr $Q;
-			if (sumArray(relativeLocalH($subdiv, $Q)) == 0){
-				pArrArr $diagram;
-			}
-			#pArrArr $diagram;
-			$dimQ[scalar(@{$Q})] += 1;
-			$codim[scalar(@{carrier($subdiv, $Q)})] += 1;
-		}
-	}
-	print "Found a total of ", $numFacets, " Non-lattice pyramids, and their dimensions and carrier codims were: \n";
-	pArr (\@dimQ);
-	pArr (\@codim);
-
-}
-
-#usage: checkAllCandidatesCounterexamples($dim $iter)
-#generates a bunch of random subdivisons
-#looks at both non-pyramidal faces and non-lattice pyramids
-sub checkAllCandidatesCounterexamples{
-	my $dim = shift;
-	my $iter = shift;
-	my $none = 0;
-	my $nottry = 0;
-	my @localh = ();
-	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 10000, 20, 50);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			$nottry++;
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @nLfacets = @{returnNLPyramids($diagram, $subdiv)};
-		if (scalar(@nLfacets) == 0){
-			$none++;
-		}
-		for my $facet (@nLfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			if ((checkMaximalFace($subdiv, $Q) and $cdim > 2) or (not checkMaximalFace($subdiv, $Q) and $cdim > 0)){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					pArrArr($diagram);
-				}
-				push(@localh, $lh);
-			}
-		}
-	}
-	print "Number with no non-lattice pyramid facets is ", $none, "\n";
-	print "Number that are not triangulations is ". $nottry, "\n";
-	return \@localh
-
-}
-
-#usage: computeNLPyramidStats($dim, $iter)
-#computes a bunch of sumRND diagrams
-#finds the pyramid faces that are not lattice pyramids
-#computes relative local h relative to faces contained in them
-#prints the result
-sub computeNLPyramidStats{
-	my $dim = shift;
-	my $iter = shift;
-	my @vanishing = (0) x ($dim + 1);
-	my @codim = (0) x @vanishing;
-	for my $i (0..$iter - 1){
-		my $diagram = sumRND($dim, 10000, 20, 50);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @faces = @{returnNLPPyramids($diagram, $subdiv)};
-
-		my @toconsider = ();
-		for my $j (0..scalar(@faces) - 1){
-			#creates array of faces, gets rid of the empty set and whole facet
-			my @facet = @{$faces[$j]};
-			my @faces = subarrs(@facet);
-			shift(@faces);
-			pop(@faces);
-			push(@toconsider, @faces);
-		}
-		my @flist = @{removeDuplicates(\@toconsider)};
-		for my $face (@flist){
-			$codim[scalar(@{carrier($subdiv, $face)})] ++;
-			if (sumArray(relativeLocalH($subdiv, $face)) == 0){
-				$vanishing[scalar(@{carrier($subdiv, $face)})] ++;
-			}
-		}
-	}
-	pArr(\@vanishing);
-	pArr(\@codim);
-}
 
 #usage:pyramidOverFace($subdiv, $facet, $face)
 #checks if the facet is a pyramid over the face
@@ -2054,86 +1256,6 @@ sub pyramidOverFace{
 }
 
 
-#usage: checkRelativeVanishingNotPyramidOver(array of subdivisions, all of the same dim)
-#prints two arrays
-#for each complex, looks at a random facet. Finds all subfaces such that the facet is not a pyramid over that face
-#computes relative local h
-sub checkRelativeVanishingNotPyramidOver{
-	my $list = shift;
-	my @list = @{$list};
-	my $size = $list[0]->DIM + 1;
-	my @v = (0) x ($size);
-	my @t = (0) x @v;
-	for my $i (0..scalar(@list) - 1){
-		if ($list[$i]->N_FACETS > 5){
-			my $facet = $list[$i]->FACETS->[3];
-			my @facet2 = @{$facet};
-			my @candidates = subarrs(@facet2);
-			shift(@candidates);
-			pop(@candidates);
-			my @good = ();
-			for my $face (@candidates){
-				if (not pyramidOverFace($list[$i], \@facet2, $face)){
-					push(@good, $face);
-				}
-			}
-			for my $face (@good){
-				$t[scalar(@{$face})] ++;
-				if (sumArray(relativeLocalH($list[$i], $face)) == 0){
-					$v[scalar(@{$face})] ++;
-				}
-			}
-		}
-	}
-	print "Total number of vanishing: ";
-	pArr(\@v);
-	print "Total number: ";
-	pArr(\@t);
-}
-
-#usage: gatherCDDataBoundary($dim, iterations)
-#generates a bunch of random sumRND($dim, 500, 30, 20)
-#find non-pyramidal facets
-#checks those facets
-sub gatherCDDataBoundary{
-	my $dim = shift;
-	my $iter = shift;
-	my $none = 0;
-	my $nottry = 0;
-	my @codim = (0) x ($dim + 1);
-	my @localh = ();
-	for my $i (0..$iter){
-		my $diagram = boundaryRND($dim, 10000, 20, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			$nottry++;
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @npfacets = @{returnNonPyramidalFaces($subdiv)};
-		if (scalar(@npfacets) == 0){
-			$none++;
-		}
-		for my $facet (@npfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			$codim[$cdim] += 1;
-			if ($cdim > 2){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					pArrArr($diagram);
-				}
-				push(@localh, $lh);
-			}
-		}
-	}
-	print "Number with no non-pyramidal facets is ", $none, "\n";
-	print "Number that are not triangulations is ". $nottry, "\n";
-	pArr(\@codim);
-	return \@localh
-}
 #usage: diagramToString($diagram)
 #turns the diagram into a string
 #puts an X between different vertices
@@ -2161,118 +1283,6 @@ sub stringToDiagram{
 }
 
 
-
-#usage: generateDiagrams($dim, $iter)
-#generates a bunch of diagrams, returns the subdivisions and the diagrams, also checks if they give counterexamples
-sub generateDiagrams{
-	my $dim = shift;
-	my $iter = shift;
-	my @diagrams = ();
-	my @subdivs = ();
-	my $none = 0;
-	my $nottry = 0;
-	my @codim = (0) x ($dim + 1);
-	my $l10 = 0;
-	my $l20 = 0;
-	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 10000, 15, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			$nottry++;
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		push(@diagrams, $diagram);
-		push(@subdivs, $subdiv);
-		my @npfacets = @{returnNonPyramidalFaces($subdiv)};
-		if (scalar(@npfacets) == 0){
-			$none++;
-		}
-		for my $facet (@npfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			$codim[$cdim] += 1;
-			if ($cdim > 2){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					pArrArr($diagram);
-				}
-				if ($lh->[1] == 0){
-					$l10 ++;
-				}
-				if ($lh->[2] == 0){
-					$l20++;
-				}
-			}
-		}
-	}
-	print "Number with no non-pyramidal facets is ", $none, "\n";
-	print "Number that are not triangulations is ". $nottry, "\n";
-	pArr(\@codim);
-	print "Number with l1 and l2 0 is ", $l10, " ", $l20, "\n";
-	
-	return (\@subdivs, \@diagrams);
-
-}
-
-#usage: findEmptySetCase($dim, $iter)
-#searches for cases when Q is the emptyset
-#also checks if they give counterexamples
-sub findEmptySetCase{
-	my $dim = shift;
-	my $iter = shift;
-	my @diagrams = ();
-	my @subdivs = ();
-	for my $i (0..$iter){
-		my $diagram = uniformRND($dim, 10000, 10, 4);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		my @npfacets = @{returnNonPyramidalFaces($subdiv)};
-
-		for my $facet (@npfacets){
-			#this line is necessary to convert from vector to aref
-			my @facet = @{$facet};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			if (scalar(@{$Q}) == 0){
-				push(@diagrams, $diagram);
-				push(@subdivs, $subdiv);
-				last;
-			}
-			my $cdim = scalar(@{carrier($subdiv, $Q)});
-			if ($cdim > 2){
-				my $lh = relativeLocalH($subdiv, $Q);
-				if (sumArray($lh) == 0){
-					pArrArr($diagram);
-				}
-
-			}
-		}
-	}	
-	return (\@subdivs, \@diagrams);
-}
-
-#usage: findEmptySets($diagram, $subdiv)
-#takes a subdivision and a diagram, returns the non-pyramidal faces
-#for which Q = emptyset
-sub findEmptySets{
-	my $diagram = shift;
-	my $subdiv = shift;
-
-	my @facets = @{returnNonPyramidalFaces($subdiv)};
-	my @giveempty = ();
-	for my $f (@facets){
-		my @facet = @{$f};
-		if (scalar(@{returnQ($diagram, $subdiv, \@facet)}) == 0){
-			push(@giveempty, $f);
-		}
-	}
-	return \@giveempty;
-}
 
 #usage: typeGraph($subdiv, $aref of vertices)
 #interprets the combinatorial type of the facet as the incidence matrix of a bipartite graph
@@ -2357,94 +1367,6 @@ sub skelToGraph{
 }
 
 
-
-#usage: gatherCombTypeData(dim, iter)
-#generates a bunch of subdivisions
-#for each subdivision, find the non-pyramidal faces
-#For each non-pyramidal face, computes Q
-#stores the combinatorial type of the non-pyramidal facet in graph form in the proper files
-#returns an array of AoAs
-#Each array will be determined the number of vertices where Q lands
-#The array with in the array will be by excess
-#Only stores if the codimension is greater than 2
-#returns an array
-sub gatherCombTypeData{
-	my $dim = shift;
-	my $iter = shift;
-	#generates the results table
-	my @results = ();
-	for my $i (0..$dim - 3){
-		push(@results, []);
-	}
-	for my $j (0..$dim - 3){
-		my @carrier_dim = ([]) x ($dim - 2 - $j);
-		push(@{$results[$j]}, @carrier_dim);
-	}
-	#generates the subdivisions
-	for my $i (0..$iter - 1){
-		my $diagram = sumRND($dim, 10000, 15, 20);
-		my $subdiv = diagramToSubdiv($diagram);
-		if ($subdiv == 1){
-			next;
-		}
-		my @faces = @{returnNonPyramidalFaces($subdiv)};
-		if (scalar(@faces) == 0){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $subdiv);
-		for my $f (@faces){
-			my @facet = @{$f};
-			my $Q = returnQ($diagram, $subdiv, \@facet);
-			if (scalar(@{carrier($subdiv, $Q)} < 3)){
-				next;
-			}
-			my $g = typeGraph($subdiv, \@facet);
-			my $vert = scalar(@{$Q});
-			my $excess = excess($subdiv, $Q);
-			push(@{$results[$vert]->[$excess]}, $g);
-		}
-
-	}
-	return @results;
-}
-
-
-#usage: vanishingTypeGraph($subdiv)
-#finds the non-pyramidal faces
-#computes, up to carrier codimension 2, relative local h relative to each
-#if relative local h vanishes, then puts the type graph in the appropriate place
-#same return type as gatherCombTypeData
-sub vanishingTypeGraph{
-	my $subdiv = shift;
-	#generates the results table
-	my @results = ();
-	my $dim = $subdiv->DIM;
-	for my $i (0..$dim - 3){
-		push(@results, []);
-	}
-	for my $j (0..$dim - 3){
-		my @carrier_dim = ([]) x ($dim - 2 - $j);
-		push(@{$results[$j]}, @carrier_dim);
-	}
-	my @faces = @{returnNonPyramidalFaces($subdiv)};
-	for my $f (@faces){
-		my @facet = @{$f};
-		my $g = typeGraph($subdiv, \@facet);
-		my @tolook = subarrs(@facet);
-		shift(@tolook);
-		pop(@tolook);
-		for my $face (@tolook){
-			if(scalar(@{carrier($subdiv, $face)}) < 3 ){
-				next;
-			}
-			if (sumArray(relativeLocalH($subdiv, $face)) == 0){
-				push(@{$results[scalar(@{$face})]->[excess($subdiv, $face)]}, $g);
-			}
-		}
-	}
-	return @results;
-}
-
 #usage: removeIsomorphic(list of simplicial complexes)
 #generates a list of the simplicial complexes up to isomorphism
 #it would be more efficient to do this using a canonical labeling
@@ -2492,108 +1414,9 @@ sub checkTypeIsomorphism{
 
 }
 
-#usage: checkIntConjecture($subdiv, $facet, face)
-#assumes relative local h relative to face is 0
-#only assumes the case of \ell_1 for the conjecture
-sub checkIntConjecture{
-	my $subdiv = shift;
-	my @facet = @{shift @_};
-	my @face = @{shift @_};
-	my $lc = List::Compare->new(\@facet, \@face);
-	my @comp = $lc->get_unique;
-	if (scalar(@comp) < 4){
-		return 0;
-	}
-	for my $k (2..int(scalar(@comp)/2)){
-		my @divisions = subsets(\@comp, $k);
-		for my $split (@divisions){
-			if (scalar(@{carrier($subdiv, union($split, \@face))}) > 0){
-				next;
-			}
-			my $list = List::Compare->new(\@comp, $split);
-			my @other = $list->get_unique;
-			if (scalar(@{carrier($subdiv, union(\@face, \@other))}) == 0){
-				print "Found one! \n";
-				printSubdiv($subdiv); 
-			}
-			#find the most efficient way to check if the complement has excess 0
-			#it is probably faster to use list compare
-		}
-	}
-}
-
-#usage: checkIntConjectureAll($subdiv)
-#find every (facet, face) pair for which relative local h vanishes (not just npyramidal)
-#checks the conjecture in that case
-#only checks if it is a pyramid over the face
-sub checkIntConjectureAll{
-	my $subdiv = shift;
-	my @facets = @{$subdiv->FACETS};
-	for my $facet (@facets){
-		my @faces = subsets(vectorToArray($facet));
-		for my $face (@faces){
-			if (scalar(@{carrier($subdiv, $face)}) < 3){
-				next;
-			}
-			if (pyramidOverFace($subdiv, $facet, $face)){
-				next;
-			}
-			if (sumArray(relativeLocalH($subdiv, $face)) == 0){
-				checkIntConjecture($subdiv, $facet, $face);
-			}
-		}
-	}
-}
-
-#usage: checkIntConjectureNP($subdiv)
-#find every (facet, face) pair for which relative local h vanishes 
-#checks the conjecture for all non-pyramidal facets
-sub checkIntConjectureNP{
-	my $subdiv = shift;
-	my @facets = @{returnNonPyramidalFaces($subdiv)};
-	for my $facet (@facets){
-		my @faces = subsets(vectorToArray($facet));
-		for my $face (@faces){
-			if (scalar(@{carrier($subdiv, $face)}) < 3){
-				next;
-			}
-			if (sumArray(relativeLocalH($subdiv, $face)) == 0){
-				checkIntConjecture($subdiv, $facet, $face);
-			}
-		}
-	}
-}
-
-
-#usage: checkIntConjectureRandList($list of subdivs)
-#checks all relative vanishing pairs for 3 basically random facets
-#checks the conjecture for all non-pyramidal facets
-sub checkIntConjectureRandList{
-	my @list = @{shift @_};
-	for my $i (0..scalar(@list) - 1){
-		if ($list[$i]->N_FACETS < 7){
-			next;
-		}
-		my @facets = ($list[$i]->FACETS->[4], $list[$i]->FACETS->[5], $list[$i]->FACETS->[6]);
-		for my $facet (@facets){
-			my @faces = subsets(vectorToArray($facet));
-			for my $face (@faces){
-				if (scalar(@{carrier($list[$i], $face)}) < 3){
-					next;
-				}
-				if (pyramidOverFace($list[$i], $facet, $face)){
-					next;
-				}
-				if (sumArray(relativeLocalH($list[$i], $face)) == 0){
-					checkIntConjecture($list[$i], $facet, $face);
-				}
-			}
-		}
-	}
-}
 
 #usage: numberDecomposition($subdiv, $facet, $face)
-#computes the number of decompositions
+#computes the number of decompositions of the facet into G_1 \cup G_2 \cup face, G_1, G_2 relatively interior 
 sub numberDecomposition{
 	my $subdiv = shift;
 	my @facet = @{shift @_};
@@ -2986,44 +1809,6 @@ sub ellCoefficient{
 	return $ans;
 }
 
-#checkFacetConjecture($subdiv)
-#checks that conjecture that if a facet F can be decomposed into a join of two internal faces
-#looks for full parition with P = \emptyset
-#then ell_i is nonzero
-sub checkFacetConjecture{
-	my $subdiv = shift;
-	my @face = ();
-	my @facets = @{$subdiv->FACETS};
-	for my $facet (@facets){
-		my @facet = @{$facet};
-		if (not is_subset(\@facet, \@face)){
-			next;
-		}
-		if (pyramidOverFace($subdiv, $facet, \@face)){
-			next;
-		}
-		my $lc = List::Compare->new(\@facet, \@face);
-		my @comp = $lc->get_unique;
-		for my $k (0..int(scalar(@comp)/2)){
-			my @divisions = subsets(\@comp, $k);
-			for my $split (@divisions){
-				if (scalar(@{carrier($subdiv, union($split, \@face))}) > 0){
-					next;
-				}
-				my $list = List::Compare->new(\@comp, $split);
-				my @other = $list->get_unique;
-				if (scalar(@{carrier($subdiv, union(\@face, \@other))}) == 0){
-					if (ellCoefficient($subdiv, $facet, $k) < 1){
-						pArr $facet;
-						return 1;
-					}
-					last;
-				}
-			}
-		}
-	}
-	return 0;
-}
 
 
 #usage: generateASubdiv($dim, $n, $number of points)
@@ -3398,7 +2183,7 @@ sub noGoodTriangulation{
 	return 1;
 }
 
-#usage: isB1Facets(diagram, array of vertices)
+#usage: isB1Facet(diagram, array of vertices)
 #checks if the facet is a B_1 facets
 #does not assume that the facet is simplicial
 sub isB1Facet{
@@ -3465,21 +2250,6 @@ sub hasBadFacet{
  	return 0;   
 }
 
-#usage: lookForBad($dim, $iter)
-#generates a bunch of random subdivs, checks if they are bad
-#reutnrs the diagrams
-sub lookForBad{
-	my $dim = shift;
-	my $iter = shift;
-	my @bad = ();
-	for my $i (0..$iter - 1){
-		my $diagram = sumRND($dim, 10000, 15, 40);
-		if (hasBadFacet($diagram)){
-			push(@bad, $diagram);
-		}
-	}
-	return \@bad;
-}
 #usage: facetToCoords($diagram, $facet)
 #diagram must be reduced
 #returns an array of arrays of the coordinates of the facet
@@ -3650,52 +2420,6 @@ sub writeSubdivToFile{
 
 }
 
-#usage: writeRandomTriangulation(dim, points, iter)
-#gets a bunch (iter) of random triangulation of the dim-sphere with points number of points
-#writes them to the files "sphere.txt"
-sub writeRandomTriangulation{
-	my $dim = shift;
-	my $points = shift;
-	my $iter = shift;
-	open(my $fh, '>', 'spheres.txt') or die "Could not open file '$filename' $!";
-	print $fh "144169\n";
-
-	for my $i (0..$iter - 1){
-		my $p = rand_sphere($dim, $points);
-		my @facets = @{$p->FACET_LABELS};
-		for my $f (@facets){
-			my @array = split(",", $f);
-			print $fh "@array", "\n";
-		}
-		print $fh "2399", "\n";
-		print $fh "1729", "\n";
-		for my $f (@facets){
-			my @array = split(",", $f);
-			print $fh "@array", "\n";
-		}
- 		print $fh "144169\n";
-
-	}
-
-}
-#usage: AoAUnion($Aoa, $AoA)
-#returns the union of the two arrays, where if two arrays in the AoA are entrwise equal then they are viewed as the same
-#returns an AoA
-sub AoAUnion{
-    my ($a1, $a2) = @_;
-    my %uniq;
-
-    $uniq{"@$_"} = 1 for @$a1;
-
-    for ( @$a2 ) {
-        my $key = "@$_";
-        next if $uniq{$key}++;
-        push @$a1, [ @$_ ];
-    }
-
-    return $a1;
-
-}
 
 #usage:generateABunchOfDiagrams(dimension, number of iterations)
 #returns a bunch of reduced that give triangulations
@@ -4411,6 +3135,7 @@ sub returnLatticePoints{
 
 #getFacetList($diagram)
 #returns the list of facets in AoA format
+#needs to be simplicial 
 sub getFacetList{
 	my $diagram = shift;
 	my $simp = diagramToSubdiv($diagram);
@@ -4729,80 +3454,6 @@ sub lookForGoodType{
 	return removeDuplicates(\@good);
 }
 
-#usage: lookForPotentialCounterexample($diagram, $subdiv)
-#checks if the essential face of any B_1 facet is a potential counterexample 
-#i.e. checks if |G_1| and |G_2| are at least 3, P is not of size 1 with i_1 = 2
-#could potentially modify to require P to have size at least 1 instead, as we don't know some of these cases 
-#returns AoA of faces 
-#returns 0 if there are none
-sub lookForPotentialCounterexample{
-	my $diagram = shift;
-	my $subdiv = shift;
-	my @B1s = @{returnB1Facets($diagram, $subdiv)};
-	my @good;
-	for my $facet (@B1s){
-		my $crit = minCritFace($diagram, $facet);
-		my $type = faceType($diagram, $crit);
-		if ($type == 0){
-			next;
-		}
-		if ((scalar(@{$type}) == 1) and ($type->[0] == 2)){
-			next;
-		}
-		if ($type->[scalar(@{$type}) - 1] == 1){
-			next;
-		}
-		push(@good, $crit);
-	}
-	@good = @{removeDuplicates(\@good)};
-
-	for my $face (@good){
-		my @facetype = @{faceType($diagram, $face)};
-		my $r = scalar(@facetype);
-		my @facet = @{findFacet($subdiv, $face)};
-		my $Q = returnQ($diagram, 3, \@facet);
-		my $E = scalar(@{$Q});
-		my $tildeE = scalar(@{$face});
-		my $posverts = posNegDecomp($diagram, \@facet)->[0];
-		my $G_1r = scalar(@{$posverts});
-		pArr(\@facetype);
-		print ($G_1r - $r);
-		if ($G_1r - $r < 3){
-			next;
-		}
-		my $G_2r = $tildeE - $E - $G_1r + $r;
-		if ($G_2r - $r < 3){
-			next;
-		}
-		pArrArr($diagram);
-		pArr($face);
-		pArr(\@facetype);
-		my $local = relativeLocalH($subdiv, $Q);
-		if (($local->[$G_1r] == 0) or ($local->[$G_2r] == 0)){
-			print "Found counterexample";
-			return 0;
-		}
-	}
-	return 1;
-
-}
-
-#usage: completeCheck(dim, number)
-#checks Alan's conjecture in dimension dim number times
-sub completeCheck{
-	my $dim = shift;
-	my $num = shift;
-	for my $i (0..($num - 1)){
-		my $diagram = sumRND($dim, 5000, 20, 50);
-		my $sub = diagramToSubdiv($diagram);
-		if ($sub == 1){
-			next;
-		}
-		$diagram = removeRedundant($diagram, $sub);
-		print "\n \nTesting $i \n";
-		lookForPotentialCounterexample($diagram, $sub);
-	}
-}
 
 
 #usage: findFacet($simplicial complex, $face)
@@ -4838,56 +3489,6 @@ sub findFacet{
 }
 
 
-#usage: testConjecture($diagram)
-#test's Alan's conjecture on non-vanishing of local h with good type
-#diagram should be reduced
-#returns 1 if conjecture holds
-#returns 0 if it does not hold
-sub testAlanConjecture{
-	my $diagram = shift;
-	my $subdiv = diagramToSubdiv($diagram);
-	my $type = lookForGoodType($diagram, $subdiv);
-	if ($type == 0){
-		return 1;
-	}
-	for my $face (@{$type}){
-		my @facet = @{findFacet($subdiv, $face)};
-		my $Q = returnQ($diagram, 3, \@facet);
-		if (sumArray(relativeLocalH($subdiv, $Q)) == 0){
-			print "Found counterexample";
-			return 0;
-		}
-	}
-	return 1;
-}
-
-sub refinedTest{
-	my $diagram = shift;
-	my $subdiv = diagramToSubdiv($diagram);
-	my $type = lookForGoodType($diagram, $subdiv);
-	if ($type == 0){
-		return 1;
-	}
-	for my $face (@{$type}){
-		my @facetype = @{faceType($diagram, $face)};
-		pArr(\@facetype);
-		my $r = scalar(@facetype);
-		my @facet = @{findFacet($subdiv, $face)};
-		my $Q = returnQ($diagram, 3, \@facet);
-		my $E = scalar(@{$Q});
-		my $tildeE = scalar(@{$face});
-		my $posverts = posNegDecomp($diagram, \@facet)->[0];
-		my $G_1r = scalar(@{$posverts});
-		my $G_2r = $tildeE - $E - $G_1r + $r;
-		my $local = relativeLocalH($subdiv, $Q);
-		if (($local->[$G_1r] == 0) or ($local->[$G_2r] == 0)){
-			print "Found counterexample";
-			return 0;
-		}
-	}
-	return 1;
-
-}
 
 
 #usage: allBigFaces($subdiv, $size)
@@ -4943,138 +3544,6 @@ sub allFacesSize{
 
 
 
-#usage: testGeneralizedConjectureOne$diagram, face)
-#checks if there is a tripartion of the face into stuff satisfying the conjecture where P is a vertex
-#returns 0 if there is not
-#returns the coefficients that should be non-zero
-sub testGeneralizedConjectureOne{
-	my $diagram = shift;
-	my @face = @{shift @_};
-	my $fsize = scalar(@face);
-	if (scalar(@{carrier($diagram, \@face)}) > 0){
-		return 0;
-	}
-	#tests each vertex one by one
-	for my $v (@face){
-		#generates the rest of the face
-		my @remains;
-		for my $w (@face){
-			if ($w != $v){
-				push(@remains, $w);
-			}
-		}
-		#checks the carrier condition
-		if(scalar(@{carrier($diagram, \@remains)}) < 2){
-			next;
-		}
-		#now looks at paritions of the remains
-		my @totest = subsets(\@remains);
-		for my $G (@totest){
-			push(@{$G}, $v);
-			if (scalar(@{carrier($diagram, $G)}) > 0){
-				next;
-			}
-
-			#checks if the complement of $G with interior is also interior
-			my $lc = List::Compare->new($G, \@face);
-			my @others = $lc->get_complement;
-			push(@others, $v);
-			if (scalar(@{carrier($diagram, \@others)}) == 0){
-				my $coef1 = scalar(@{$G});
-				my $coef2 = scalar(@others);
-				return [$coef1, $coef2];
-			}
-
-
-		}
-
-	}
-	return 0;
-}
-
-#usage: testGeneralizedConjectureTwo($diagram, face)
-#checks if there is a tripartion of the face into stuff satisfying the conjecture where P has size 2
-#returns 0 if there is not
-#returns the tripation if there is
-#should have no interior vertices
-sub testGeneralizedConjectureTwo{
-	my $diagram = shift;
-	my @face = @{shift @_};
-	my $fsize = scalar(@face);
-	if (scalar(@{carrier($diagram, \@face)}) > 0){
-		return 0;
-	}
-	#tests each vertex one by one
-	for my $v (@face){
-		#generates the rest of the face
-		my @other;
-		for my $w (@face){
-			if ($w != $v){
-				push(@other, $w);
-			}
-		}
-
-		#checks the carrier condition
-		if(scalar(@{carrier($diagram, \@other)}) < 2){
-			next;
-		}
-		for my $w(@face){
-			if ($w == $v){
-				next;
-			}
-			my @remains;
-			for my $z (@face){
-				if ($z != $w){
-					push(@remains, $z);
-				}
-			}
-			#checks the carrier condition
-			if(scalar(@{carrier($diagram, \@remains)}) < 2){
-				next;
-			}
-			#now partitions the remaining vertices
-			my @verts;
-			for my $z (@face){
-				if (($z != $v) and ($z != $w)){
-					push(@verts, $z);
-				}
-			}
-			#now looks at paritions of the vertices
-			my @totest = subsets(\@verts);
-			for my $G (@totest){
-				push(@{$G}, $v);
-				push(@{$G}, $w);
-				if (scalar(@{carrier($diagram, $G)}) > 0){
-					next;
-				}
-
-				#checks if the complement of $G with interior is also interior
-				my $lc = List::Compare->new($G, \@face);
-				my @others = $lc->get_complement;
-				push(@others, $v);
-				push(@others, $w);
-				if (scalar(@{carrier($diagram, \@others)}) == 0){
-					my $coef1 = scalar(@{$G});
-					my $coef2 = scalar(@others);
-					return [$coef1, $coef2];
-				}
-			}
-
-
-
-			
-
-	
-
-		
-
-
-
-		}
-
-	}
-	return 0;
-}
 
 #use: hasFullParition($subdiv)
 #checks if any facet has a full partition with P empty
@@ -5112,280 +3581,6 @@ sub hasFullPartitionPEmpty{
 }
 
 
-#usage: testConverse(subdiv)
-#subdiv should have no interior vertices, but it is probably fine 
-#if local h is 0, tests Alan's conjecture
-#if local h is non-zero, tests if there is a witness to this from Alan's conjecture
-#returns -1 if it finds a counterexample
-#returns 0 if all is well
-#returns 1 if local h is non-zero but there is no witness
-#works in up to dim 4, might miss a witness with |P| = 3 in dim 5
-sub testConverse{
-	my $subdiv = shift;
-	if (hasFullPartitionPEmpty($subdiv)){
-		return 0;
-	}
-	my $local = relativeLocalH($subdiv, []);
-	my $iszero = sumArray($local);
-	my $facestocheck = allBigFaces($subdiv, 2);
-	if ($iszero == 0){
-		for my $face (@{$facestocheck}){
-			if ((testGeneralizedConjectureTwo($subdiv, $face) != 0) or (testGeneralizedConjectureOne($subdiv, $face) != 0)){
-				return -1;
-			}
-		}
-		return 0;
-	}
-	for my $face (@{$facestocheck}){
-		if ((testGeneralizedConjectureTwo($subdiv, $face) != 0) or (testGeneralizedConjectureOne($subdiv, $face) != 0)){
-			pArr($face);
-			return 0;
-		}
-	}
-	pArr($local);
-	return 1;
-
-}
-
-
-
-
-
-
-
-#usage: finelyTestAlanConjecture($subdiv, face)
-#checks if there is a tripartion of the face into stuff satisfying the conjecture where P has size 2
-#works in case E = emptyset
-#and G_1, G_2 both have size at least 3
-#returns 0 if there is not
-#returns the tripation if there is
-#should have no interior vertices
-sub finelyTestAlanConjecture{
-	my $subdiv = shift;
-	my @face = @{shift @_};
-	my $fsize = scalar(@face);
-	if ($fsize < 8){
-		return 0;
-	}
-	if (scalar(@{carrier($subdiv, \@face)}) > 0){
-		return 0;
-	}
-	#tests each vertex one by one
-	for my $v (@face){
-		#generates the rest of the face
-		my @other;
-		for my $w (@face){
-			if ($w != $v){
-				push(@other, $w);
-			}
-		}
-
-		#checks the carrier condition
-		if(scalar(@{carrier($subdiv, \@other)}) < 2){
-			next;
-		}
-		for my $w(@face){
-			if ($w == $v){
-				next;
-			}
-			my @remains;
-			for my $z (@face){
-				if ($z != $w){
-					push(@remains, $z);
-				}
-			}
-			#checks the carrier condition
-			if(scalar(@{carrier($subdiv, \@remains)}) < 2){
-				next;
-			}
-			#now we have two vertices, $v and $w$
-			#P = {$v, $w}, satisfies this condition
-
-			#now gets remaining vertices
-			my @verts;
-			for my $z (@face){
-				if (($z != $v) and ($z != $w)){
-					push(@verts, $z);
-				}
-			}
-			#now looks at paritions of the vertices
-			for my $size (3..($fsize - 5)){
-				my @totest = subsets(\@verts, $size);
-				for my $G (@totest){
-					#if (scalar(@{$G}) < 3){
-					#	next;
-					#}
-					#if ($fsize - 2 - scalar(@{$G}) < 3){
-					#	next;
-					#}
-					push(@{$G}, $v);
-					push(@{$G}, $w);
-					if (scalar(@{carrier($subdiv, $G)}) > 0){
-						next;
-					}
-
-					#checks if the complement of $G with interior is also interior
-					my $lc = List::Compare->new($G, \@face);
-					my @others = $lc->get_complement;
-					push(@others, $v);
-					push(@others, $w);
-					if (scalar(@{carrier($subdiv, \@others)}) == 0){
-						my $coef1 = scalar(@{$G});
-						my $coef2 = scalar(@others);
-						return [$coef1, $coef2];
-					}
-				}
-			}
-
-
-		}
-
-	}
-	return 0;
-}
-
-
-#usage: checkSubdivision($subdiv, $size)
-#subdiv should have local h 0
-#checks if any of the faces of size $size satisfying the hypothesis of Alan's conjecture 
-sub checkSubdivision{
-	my $subdiv = shift;
-	my $size = shift;
-	my $faces = allFacesSize($subdiv, $size);
-	for my $f (@{$faces}){
-		if (finelyTestAlanConjecture($subdiv, $f) != 0){
-			print "Found counterexample \n";
-			pArr($f);
-		}
-	}
-}
-
-#usage: finelyTestRelativeConjecture($subdiv, $face, $E)
-#face should be disjoint from $E 
-#checks if there is a tripation of $face = G_1 \cup G_2 \cup P, with size of P = 2
-#P satisfying the codim condition 
-#E \cup G_1 \cup P, E \cup G_2 \cup P interior 
-#looks for full parition with size of P = 2
-#returns 0 if there is no such decomposition 
-#returns 1 if there is a decomposition 
-sub finelyTestRelativeConjecture{
-	my $subdiv = shift;
-	my @face = @{shift @_};
-	my @E = @{shift @_};
-	my @both = @{union(\@face, \@E)};
-	my $fsize = scalar(@face);
-	if ($fsize < 8){
-		return 0;
-	}
-	#tests each vertex one by one
-	for my $v (@face){
-		#generates the rest of the face
-		my @other;
-		for my $w (@both){
-			if ($w != $v){
-				push(@other, $w);
-			}
-		}
-
-		#checks the carrier condition
-		if(scalar(@{carrier($subdiv, \@other)}) < 2){
-			next;
-		}
-		for my $w(@face){
-			if ($w == $v){
-				next;
-			}
-			my @remains;
-			for my $z (@both){
-				if ($z != $w){
-					push(@remains, $z);
-				}
-			}
-			#checks the carrier condition
-			if(scalar(@{carrier($subdiv, \@remains)}) < 2){
-				next;
-			}
-			#now we have two vertices, $v and $w$
-			#P = {$v, $w}, satisfies this condition
-
-			#now gets remaining vertices
-			my @verts;
-			for my $z (@face){
-				if (($z != $v) and ($z != $w)){
-					push(@verts, $z);
-				}
-			}
-			#now looks at paritions of the vertices
-			for my $size (3..($fsize - 5)){
-				my @totest = subsets(\@verts, $size);
-				for my $G (@totest){
-					#if (scalar(@{$G}) < 3){
-					#	next;
-					#}
-					#if ($fsize - 2 - scalar(@{$G}) < 3){
-					#	next;
-					#}
-					push(@{$G}, $v);
-					push(@{$G}, $w);
-					$G = union($G, \@E);
-					if (scalar(@{carrier($subdiv, $G)}) > 0){
-						next;
-					}
-
-					#checks if the complement of $G with interior is also interior
-					my $lc = List::Compare->new($G, \@face);
-					my @others = $lc->get_complement;
-					push(@others, $v);
-					push(@others, $w);
-					@others = @{union(\@others, \@E)};
-					if (scalar(@{carrier($subdiv, \@others)}) == 0){
-						my $coef1 = scalar(@{$G});
-						my $coef2 = scalar(@others);
-						return 1;
-					}
-				}
-			}
-
-
-		}
-
-	}
-	return 0;
-
-}
-
-
-#usage: testRelativeAlanConjecture($subdiv, $size, $esize)
-#checks if any of the faces of size $size satisfying the hypothesis of Alan's conjecture with E of size $size
-#sorts by possible $E 
-#first checks if local h relative to E is 0, not clear that this is actually more efficient
-sub testRelativeAlanConjecture{
-	my $subdiv = shift;
-	my $size = shift;
-	my $esize = shift;
-	my $faces = allFacesSize($subdiv, ($size + $esize));
-	my $possibleEs = allFacesSize($subdiv, $esize);
-	for my $E (@{$possibleEs}){
-		if (sumArray(relativeLocalH($subdiv, $E)) != 0){
-			next;
-		}
-		for my $f (@{$faces}){
-		    my $lc = List::Compare->new($E, $f);
-    		my @intersection = $lc->get_intersection;
-    		if (scalar(@intersection) < $esize){
-    			next;
-    		}
-    		my @restofface = $lc->get_complement;
-    		#pArr(\@restofface);
-    		#pArr($E);
-			if (finelyTestRelativeConjecture($subdiv, \@restofface, $E) == 1){
-				print "Found counterexample \n";
-				pArr($E);
-				pArr($f);
-			}
-		}
-	}
-}
 
 
 #usage: specialLSOP(subdiv)
@@ -5552,41 +3747,6 @@ sub monomialVanishes{
 }
 
 
-#usage: checkInternalEdgeGraphVanishing($subdiv)
-#finds the internal edge graphs 
-#returns a list of the monomial corresponding to internal edges that vanish in the internal edge graph
-#and a list of the monomials that vanish in the the subdivision restricted to the subcomplex induced by the 
-#vertices of the internal edge graph 
-#subdivision should have no internal vertices
-sub checkInternalEdgeGraphVanishing{
-	my $subdiv = shift;
-	pArr(relativeLocalH($subdiv, []));
-	my $numvert = $subdiv->N_VERTICES;
-	my @intedges = allIntFaces($subdiv, 2, [0..($numvert - 1)]);
-	my $numedges = scalar(@intedges);
-	if ($numedges < 2){
-		print "No or one internal edges \n";
-		return [[], []];
-	}
-	my $lc = List::Compare->new(@intedges);
-	my @alledges = $lc->get_union;
-	my @wholecomplexvanishing;
-	#my @restrictedvanishing;
-	for my $edge (@intedges){
-		if (not monomialVanishes($subdiv, $edge, [0..($numvert - 1)])){
-			push(@wholecomplexvanishing, $edge);
-		}
-		#if (not monomialVanishes($subdiv, $edge, \@alledges)){
-		#	push(@restrictedvanishing, $edge);
-		#}
-	}
-	my $wholevanish = scalar(@wholecomplexvanishing);
-	#my $restrictedvanish = scalar(@restrictedvanishing);
-
-	print "num int edges is ", $numedges; 
-	print ", vanishing is ", $wholevanish, ", non-vanishing is ", ($numedges - $wholevanish), "\n";
-	return \@wholecomplexvanishing;
-}
 
 
 #usage: computeVw(subdiv, face, vertex)
@@ -5720,67 +3880,8 @@ sub hasInteriorPartition{
 	return 0;
 }
 
-#usage: checkIntPartitionVanishing($subdiv)
-#find all full paritions 
-#checks if the corresponding monomials are non-vanishing 
-#returns 1 if there is an interior partition where a minimal interior facce does not vanish
-sub checkIntPartitionVanishing{
-	my $subdiv = shift;
-	my @facets = @{$subdiv->FACETS};
-	for my $facet (@facets){
-		my @facet = @{$facet};
-		for my $k (0..int(scalar(@facet/2))){
-			my @divisions = subsets(\@facet, $k);
-			for my $split (@divisions){
-				if (scalar(@{carrier($subdiv, $split)}) > 0){
-					next;
-				}
-				my $list = List::Compare->new(\@facet, $split);
-				my @other = $list->get_unique;
-				if (scalar(@{carrier($subdiv, \@other)}) == 0){
-					my $nonminimal = 0;
-					#checks if $split is minimal 
-					my @cd1faces = subsets($split, $k - 1);
-					for my $f (@cd1faces){
-						if (scalar(@{carrier($subdiv, $f)}) == 0){
-							$nonminimal = 1;
-							last;
-						}
-					}
-					#checks if split is non-zero in the local face module 
-					if ($nonminimal == 0){
-						if (monomialVanishes($subdiv, $split, \@facet) == 0){
-							pArr($split);
-							pArr(\@other);
-							return 1;
-						}
-					}
-				}
-			}
-		}
-	}
-	return 0;
-
-}
 
 
-#usage: lookForInterestingMonomials($subdiv)
-#returns 1 if it has no interior partition, but local h is non-zero
-#returns 2 if it has an interior partition with P empty, but the monomial vanishes in the facet 
-#returns 0 otherwise
-sub lookForInterestingMonomials{
-	my $subdiv = shift;
-	if (sumArray(relativeLocalH($subdiv, [])) > 0){
-		return 0;
-	}
-	if (not hasInteriorPartition($subdiv)){
-		return 1;
-	}
-	if (checkIntPartitionVanishing($subdiv)){
-		return 2;
-	}
-	return 1;
-}
 
 #usage: sortIntoClusters($diagram, list of facets)
 #list of facets should be a list of facets all contributing the same candidate pole 
@@ -6068,71 +4169,6 @@ sub isELTCoherent{
 
 }
 
-#usage: testCD1Conjecture($diagram, $center, $cluster, isPole, $subdiv)
-#center should have codimension 1
-#tests the conjecture about whether the pole is fake in this case
-#isPole should be 0 or 1
-#the conjecture: pole is fake unless the facet is B_1 or there is a unique apex of the center and is not ELT coherent
-#returns 0 if unexpected behavior
-sub testCD1Conjecture{
-	my $diagram = shift;
-	my $center = shift;
-	my $cluster = shift;
-	my $isPole = shift;
-	my $peaks0 = peakDirectionPairs($diagram, $cluster->[0]);
-	my $peaks1 = peakDirectionPairs($diagram, $cluster->[1]);
-	#checks if either facet is not B_1
-	if ((scalar(@{$peaks0}) == 0) or (scalar(@{$peaks1}) == 0)){
-		if ($isPole == 0){
-			print "CD1 case, Pole is fake even though not B_1 \n";
-			return 0;
-		}
-		else{
-			return 1;
-		}
-	}
-	#checks if there is a vertex in $center that is B_1 in a unique direction 
-	#if this is the case, then pole should be fake 
-	#as long as both facets are B_1
-	my $uniques = returnUniqueApex($diagram, $center);
-	if (scalar(@{$uniques}) > 0){
-		if ($isPole == 1){
-			print "Pole is real even though there is a unique apex, CD 1 conjecture is wrong \n";
-			pArrArr($cluster);
-			return 0;
-		}
-		else{
-			return 1;
-		}
-	}
-	#if there is is no unique apex, then only need to check ELT coherence 
-	if (isELTCoherent($diagram, $cluster) == 0){
-		if ($isPole == 0){
-			print "Pole is fake even though should be real \n";
-			pArrArr($cluster);
-			my $subdiv = shift;
-			my $essential = returnQ($diagram, 3, $cluster->[0]);
-			if (sumArray(relativeLocalH($subdiv, $essential)) == 0){
-				pArrArr($facets);
-				print "Eigenvalue unexpectedly does not contribute \n";
-			}
-			return 0;
-		}
-		else{
-			return 1;
-		}
-	}
-	else{
-		if ($isPole == 1){
-			print "Pole is real even though ELT coherent \n";
-			return 0;
-		}
-		else{
-			return 1;
-		}
-	}
-
-}
 
 
 #usage:getAllClusterFaces($subdiv, $center)
@@ -6189,7 +4225,7 @@ sub findLargeCDOperative{
 	my $centerclusters = sortIntoClusters($diagram, \@allfacets);
 	my @centers = @{$centerclusters->[0]};
 	for my $c (@centers){
-		if (scalar(@{$c}) > $dim - 1){
+		if (scalar(@{$c}) > $dim - 2){
 			next;
 		}
 		if (checkIfOperative($diagram, $subdiv, $c)){
@@ -6199,6 +4235,10 @@ sub findLargeCDOperative{
 	}
 	return 0;
 }
+
+
+
+
 
 
 
