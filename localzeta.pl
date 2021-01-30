@@ -765,6 +765,7 @@ sub hasUniqueMinimalFace{
 		print "Found counterexample \n";
 		pArrArr($diagram);
 		pArr($facet);
+		print(keys %hash);
 		return 1;
 	}
 	return 0;	
@@ -774,8 +775,8 @@ sub hasUniqueMinimalFace{
 #checks all non-simplicial facets to see if they have a unique minimal face
 sub checkDiagramForUniqueMinimalFace{
 	my $diagram = shift;
-	my $poly = nonSimpDiagramToSimp($diagram);
-	my $facets = $poly->FACETS;
+	$diagram = completelyReduceDiagram($diagram);
+	my $facets = returnNonSimpFacets($diagram);
 	my $dim = scalar(@{$diagram->[0]});
 	for my $f (@{$facets}){
 		if (scalar(@{$f}) == $dim){
