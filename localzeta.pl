@@ -735,13 +735,15 @@ sub contribFromFlagOtherVertex{
 }
 
 
-#usage: hasUniqueMinimalFace(diagram, facet)
+#usage: hasUniqueMinimalFace(diagram, facet, hasse)
 #returns 1 if the facet contains a unique minimal critical face 
 #returns 0 otherwise 
 #Only interesting if the facet is simplicial 
+#kludge to try to find examples with no unique minimal face
 sub hasUniqueMinimalFace{
 	my $diagram = shift;
 	my $facet = shift;
+	my $hasse = shift;
 	my $dim = scalar(@{$diagram->[0]});
 	my @spanning = subsets($facet, $dim);
 	my %hash;
@@ -756,6 +758,12 @@ sub hasUniqueMinimalFace{
 			next;
 		}
 		my $mincrit = minCritFace($diagram, $candidate);
+		if (inHasse($hasse, $mincrit) == 0){
+			next;
+		}
+		if (scalar(@{$mincrit}) == $dim){
+			next;
+		}
 		my $str = "@{$mincrit}";
 		if (not $hash{$str}){
 			$hash{$str} = 1;
@@ -777,14 +785,20 @@ sub checkDiagramForUniqueMinimalFace{
 	my $diagram = shift;
 	$diagram = completelyReduceDiagram($diagram);
 	my $facets = returnNonSimpFacets($diagram);
+	if (scalar(@{$facets}) == 0){
+		return 0;
+	}
+	my $poly = newtonPolyhedron($diagram);
+	my $hasse = $poly->HASSE_DIAGRAM;
 	my $dim = scalar(@{$diagram->[0]});
 	for my $f (@{$facets}){
-		if (scalar(@{$f}) == $dim){
-			next;
+		if (scalar(@{$f}) != $dim){
+			if(hasUniqueMinimalFace($diagram, \@{$f}, $hasse) == 1){
+				return 1;
+			}
 		}
-		print "found nonsimp";
-		hasUniqueMinimalFace($diagram, \@{$f});
 	}
+	return 0;
 }
 
 

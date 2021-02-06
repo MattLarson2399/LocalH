@@ -4236,8 +4236,20 @@ sub findLargeCDOperative{
 	return 0;
 }
 
-
-
+#usage: inHasse($hasse diagram, $face)
+#takes hasse diagram of a polytope
+#returns 1 if $face is a face 
+#returns 0 others 
+sub inHasse{
+	my $hasse = shift;
+	my $face = shift;
+	for my $f (@{$hasse->FACES}){
+		if (entrywiseEquality($face, \@{$f})){
+			return 1;
+		}
+	}
+	return 0;
+}
 
 
 
