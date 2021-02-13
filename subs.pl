@@ -4251,6 +4251,68 @@ sub inHasse{
 	return 0;
 }
 
+#usage: subdivHasOperative(diagram, triangulation, candidate pole)
+#candidate pole should be rational number 
+#returns 1 if there is an operative labeling for the candidate pole 
+#returns 0 otherwise
+sub subdivHasOperative{
+	my $diagram = shift;
+	my $tri = shift;
+	my $cand = shift;
+	my @facets = @{$tri->FACETS};
+	#finds facets with candidate pole s_0 
+	my @contributing;
+	for my $f (@facets){
+		if (rationalCandidatePole($diagram, $f) == $cand){
+			push(@contributing, $f);
+		}
+	}
+	#gets the minimal faces 
+	my $clusters = sortIntoClusters($diagram, \@contributing);
+	for my $c (@{$clusters}){
+		my $allfaces = getAllClusterFaces($tri, $c->[0]);
+		for my $face (@{$allfaces}){
+			if (scalar(@{returnUniqueApex($diagram, $face)}) == 0){
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+#usage: checkIndependenceConjecture(diagram, candidate)
+#generates a bunch of triangulations 
+#checks the conjecture that whether they have an operative labeling is independent of triangulation 
+#cand should be a rational number 
+sub checkIndependenceConjecture{
+	my $diagram = shift;
+	my $cand = shift;
+	my $tally = 0;
+	for my $i (0..9){
+		my $nonSimp = nonSimpDiagramToSimp($diagram);
+		$tally += subdivHasOperative($diagram, $nonSimp, $cand);
+	}
+	if ($tally == 0 or $tally == 10){
+		return 1;
+	}
+	print "Found counterexample";
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

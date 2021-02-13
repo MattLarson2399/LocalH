@@ -51,6 +51,24 @@ sub dualFan{
 	return $fan;
 }
 
+#usage: makePrimitive(array of integers)
+#array must be all integral
+#divides through by gcd of all entries
+#there are some issues with gcd and mod and data type, polymake has a built in gcd function
+sub makePrimitive{
+	my @vec = @{shift @_};
+	my $gcd = gcd($vec[0], $vec[1]);
+	for my $i (2..scalar(@vec) - 1){
+		$gcd = gcd($gcd, abs($vec[$i]));
+		if ($gcd == 1){
+			last;
+		}
+	}
+	my @result = map(new Rational($_/$gcd), @vec);
+	return \@result;
+}
+
+
 #usage: changeToPrimitive($arref)
 #assumes every entry is either 1 or 0 or a non-integer Rational - must use the polymake type
 #returns a primitive integer vector in that direction
@@ -802,6 +820,38 @@ sub checkDiagramForUniqueMinimalFace{
 }
 
 
+#usage: checkOperativeFakeConjecture($diagram)
+#diagram should be reduced
+#for each candidate pole, checks if the poset of faces contibuting that candidate pole admits 
+#an operative labeling 
+#if it does, conjecture predicts pole should fake 
+#tests this 
+sub checkOperativeFakeConjecture{
+	my $diagram = shift;
+	my $localzeta = localZetaFunction($diagram);
+	my $nonSimp = nonSimpDiagramToSimp($diagram);
+	my $tri = diagramToPerturbedSubdiv($diagram);
+	my @fs = @{$nonSimp->FACETS};
+	my @cands;
+	my %hash;
+	for my $f (@fs){
+		#possibly need to convert facet to array
+		my $num = exactCandidatePole($diagram, $f);
+		if (not $hash{$num}){
+			$hash{$num} = 1;
+			push(@cands, $num);
+		}
+	}
+	for my $c (@cands){
+		if (isPole($localzeta, $c)){
+			if (subdivHasOperative($diagram, $tri, $c)){
+				print "Found counterexample \n \n \n";
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
 
 
 
