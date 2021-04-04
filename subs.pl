@@ -17,6 +17,7 @@ use Algorithm::Combinatorics "subsets";
 use PDL;
 use PDL::Matrix;
 use PDL::MatrixOps;
+use List::Util qw(shuffle);
 
 script("/Users/matthew/Desktop/Local_Zeta_Function/code/utilities.pl");
 
@@ -1024,6 +1025,16 @@ sub diagramToSubdiv{
     }
     return 1;
 
+}
+
+#usage: isSimplicial($diagram)
+#returns 1 if simplicial, 0 otherwise
+sub isSimplicial{
+	my $diagram = shift;
+	if (diagramToSubdiv($diagram) == 1){
+		return 0;
+	}
+	return 1;
 }
 
 
@@ -2430,7 +2441,7 @@ sub generateABunchOfDiagrams{
 	my $iter = shift;
 	my @diagrams = ();
 	for my $i (0..$iter){
-		my $diagram = sumRND($dim, 50, 15, 6);
+		my $diagram = sumRND($dim, 25, 15, 10);
 		my $subdiv = diagramToSubdiv($diagram);
 		if ($subdiv == 1){
 			next;
@@ -2440,6 +2451,26 @@ sub generateABunchOfDiagrams{
 	}
 	return \@diagrams;
 }
+
+#usage:generateABunchOfDiagramsNonSimp(dimension, number of iterations)
+#returns a bunch of reduced that give non-simplicial polyhedra
+#sumRND is sumRND($dim, $cbound, $sum, $num)
+#produces reduced diagrams!
+sub generateABunchOfDiagramsNonSimp{
+	my $dim = shift;
+	my $iter = shift;
+	my @diagrams = ();
+	for my $i (0..$iter){
+		my $diagram = sumRND($dim, 50, 20, 10);
+		if (isSimplicial($diagram)){
+			next;
+		}
+		push(@diagrams, completelyReduceDiagram($diagram));
+	}
+	return \@diagrams;
+}
+
+
 
 #usage:returnB1Facets($diagram, $subdiv)
 #diagram should be reduced
@@ -4201,6 +4232,7 @@ sub getAllClusterFaces{
 #checks if there is an operative labeling of the poset of faces above the cluster 
 #assumes simplicial
 #returns 1 if there is an operative labeling, 0 otherwise
+#should maybe remove at some point
 sub checkIfOperative{
 	my $diagram = shift;
 	my $subdiv = shift;
@@ -4269,8 +4301,9 @@ sub subdivHasOperative{
 	}
 	#gets the minimal faces 
 	my $clusters = sortIntoClusters($diagram, \@contributing);
-	for my $c (@{$clusters}){
-		my $allfaces = getAllClusterFaces($tri, $c->[0]);
+	for my $c (@{$clusters->[0]}){
+		#c is the minimal face 
+		my $allfaces = getAllClusterFaces($tri, $c);
 		for my $face (@{$allfaces}){
 			if (scalar(@{returnUniqueApex($diagram, $face)}) == 0){
 				return 0;
@@ -4299,21 +4332,645 @@ sub checkIndependenceConjecture{
 	return 0;
 }
 
+#usage: maximizeFullPartition($subdiv, F_1, F_2, A_F, E)
+#(F_1, F_2, A_F) should be a full partition of a face F 
+#and should have |V_w| \ge 2 for all w 
+#finds a maximal face of link(F) so that we can add it to F_2 and still have a full partition 
+#with |V_w| \ge 2
+#should have E contained in F_2
+sub maximizeFullPartition{
+	my $subdiv = shift;
+	my $dim = $subdiv->DIM;
+	my $F1 = shift;
+	my $F2 = shift;
+	my $AF = shift;
+	my $E = shift;
+	my $F = union(union(union($F1, $F2), $AF), $E);
+	my @F = sort {$a <=> $b} @{$F};
+	$F = \@F;
+	#finds a list of faces in the star of F
+	my $link = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $F));
+    #creates array of the faces of link 
+    my $diagram = $link->HASSE_DIAGRAM;
+    my $face_list = $diagram->FACES;
+    my @face_list = @{$face_list};
+    shift(@face_list);
+    my @face_list2 = map(vectorToArray($_), @face_list);
+    my @face_list3 = map(reindex($link, $_), @face_list2);
+    #shuffles face to get more interesting results 
+    @face_list3 = shuffle(@face_list3);
+
+	my $record = $F;
+	my $recordsize = scalar(@{$F});
+	my $finalFace = [];
+	my $finalF2 = $F2;
+	for my $face (@face_list3){
+		my $bad = 0;
+		if (not ((scalar(@{$face}) + scalar(@{$F})) > $recordsize)){
+			next;
+		}
+		my $bigF2 = union($F2, $face);
+		for my $w (@{$AF}){
+			my $addw = union(union($bigF2, [$w]), $E);
+			if (scalar(@{carrier($subdiv, union($bigF2, $E))}) == scalar(@{carrier($subdiv, $addw)}) + 1){
+				$bad = 1;
+				last;
+			}
+		}
+		if ($bad == 0){
+			$finalFace = $face;
+			$finalF2 = $bigF2;
+			$record = union($F, $face);
+			$recordsize = scalar(@{$record});
+		}
+	}
+	#finds final F_1, F_2, A_F
+	#E is still $E 
+	my @finalF2 = sort {$a <=> $b} @{$finalF2};
+	my @finalAF;
+	my @F1 = @{$F1};
+	for my $w (@{$AF}){
+		my $addw = union($E, union(\@finalF2, [$w]));
+		if (scalar(@{carrier($subdiv, union(\@finalF2, $E))}) == scalar(@{carrier($subdiv, $addw)})){
+			push(@F1, $w);
+		}
+		else{
+			push(@finalAF, $w);
+		}
+	}
+	for my $w (@{$AF}){
+		my $addw = union(union(\@finalF2, [$w]), $E);
+		my $sizeVw = scalar(@{carrier($subdiv, $addw)}) - scalar(@{carrier($subdiv, union($E, \@finalF2))});
+		if ($sizeVw < -2){
+			print "Found example with |V_w| > 2";
+			return 1;
+		}
+	}
+	my @record = sort {$a <=> $b} @{$record};
+	$record = \@record;
+	if (2*$recordsize + scalar(@{carrier($subdiv, union($E, \@finalF2))}) != 2*$dim + 2){
+		print "Found example with codimension too large";
+		return 1;
+	}
 
 
+	#checks if x^{F_1 \cup A_F} vanishes when restricted to star(F)
+	if (scalar(@{$E}) == 0){
+		#print "Found E empty case \n";
+		my $starofface = new topaz::GeometricSimplicialComplex(topaz::star($subdiv, \@record));
+		my $testface = union(\@F1, \@finalAF);
+		my @testface = sort {$a <=> $b} @{$testface};
+		my @vertexlist = @{$starofface->VERTEX_LABELS};
+		if(monomialVanishes($subdiv, \@testface, \@vertexlist) == 0){
+			print "Monomial is unexpectedly 0, strategy doesn't work \n";
+		}
+	}
 
 
+	#checks if there is a face in the closed star of F_2 \cup A_F
+	#which has carrier codimension at most 1, but does not contain A_F
+	my $starof = union($E, union(\@finalF2, \@finalAF));
+	my @starof = sort {$a <=> $b} @{$starof};
+	my $star = new topaz::GeometricSimplicialComplex(topaz::star($subdiv, \@starof));
+	my $hasse = $star->HASSE_DIAGRAM;
+	my @facesofstar1 = @{$hasse->FACES};
+	shift(@facesofstar1);
+    my @facesofstar = map(reindex($star, vectorToArray($_)), @facesofstar1);
+
+	#goes through faces of star 
+	#checks if the size is at most |E| + |F_1|
+	#checks if the face does not contain E or does contain A_F, moves on 
+	#then the checks the conjecture that the carrier codimension should be at least 2
+	my $targetsize = scalar(@{$E}) + scalar(@F1);
+	for my $face (@facesofstar){
+		if (scalar(@{$face}) > $targetsize){
+			next;
+		}
+		if (is_subset_unsorted($face, \@finalAF)){
+			next;
+		}
+		if (not is_subset_unsorted($face, $E)){
+			next;
+		}
+		if (scalar(@{carrier($subdiv, $face)}) < 2){
+			print "Found counterexample to the theorem 1.3 strategy \n";
+			pArr($face);
+			pArrArr([\@F1, \@finalF2, \@finalAF, $E]);
+			return 1;
+		}
+	}
 
 
+	#code below checks if the link "looks like the cross polytope"
+
+	#if ($recordsize < $dim){
+
+	#	my $L = new topaz::GeometricSimplicialComplex(topaz::link_complex($subdiv, $record));
+	#	my @verts = @{$L->VERTEX_LABELS};
+	#	for my $v (@verts){
+	#		for my $w (@{$AF}){
+				#print "testing $v, $w \n";
+				#print scalar(@{carrier($subdiv, union(\@finalF2, [$w]))}), "\n";
+				#print scalar(@{carrier($subdiv, union(\@finalF2, [$v, $w]))}), "\n";
+				#next line checks if adding v wipes out the stuff added by w 
+	#			if (scalar(@{carrier($subdiv, union(\@finalF2, [$v]))}) == scalar(@{carrier($subdiv, union(\@finalF2, [$v, $w]))})){
+					#this line checks if w is still an apex
+	#				if (scalar(@{carrier($subdiv, union(\@finalF2, [$w]))}) != scalar(@{carrier($subdiv, \@finalF2)})){
+	#					print "Found counterexample: conjecture is false!!!!!!!!!!!!!!!!!!!!!!!!!!! \n";
+	#					pArr $record;
+	#					pArr(\@finalF2);
+	#					return 1;
+	#				}
+	#			}
+	#		}
+	#	}
+	#if ($recordsize < $dim - 1){
+	#	print "Found example in codim ", ($dim - $recordsize + 1), "\n";
+	#	print "Initial size was ", scalar(@F), "\n";
+	#}
+	
+	return [$recordsize, $record];
+}
+
+#usage: fullPartitionFromFacet($diagram, $facet)
+#takes a facet 
+#returns the full partition of the minimal face contained in that facet 
+#returns 0 if the full partition does not have |V_w| \ge 2 for all w
+#does this numerically 
+#returns [F_1, F_2, A_F, E]
+sub fullPartitionFromFacet{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$facet}) - 1;
+	#creates AoA of the coordinants of of P
+	my @coords = ();
+	for my $i (0..$dim){
+		push(@coords, $diagram->[$facet->[$i]]);
+	}
+	#now we find where (1,1,..,1) lands
+	#to do this, solve Ax = b, b = (1,1..,1), A = matrix whose rows are the coordinant vectors of the face
+	#The entries that are integers is what we care about
+	#first creates (1,1,,1)
+	my @row = (1) x ($dim + 1);
+	my $r = pdl[\@row];
+	my $target = $r->transpose;
+	#now creates the matrix of the coords
+	my $tpose = pdl[\@coords];
+	my $mat = $tpose->transpose;
+	my $inv = inv($mat);
+	my $res = $inv x $target;
+	#finds the non-integer, finds Q
+	#due to some stupid machine precision stuff, checks if it is within 10^{-8}
+	my @maybeapex = ();
+	my @F1 = ();
+	my @F2 = ();
+	my @E = ();
+	my @AF = ();
+	my @res = $res->list;
+	for my $j (0..$dim){
+		if (abs($res[$j] - round($res[$j])) > 0.00000001){
+			push(@E, $facet->[$j]);
+			next;
+		}
+		elsif ($res[$j] > 0.00000001){
+			push(@maybeapex, $facet->[$j]);
+			next;
+		}
+		elsif ($res[$j] < -0.00000001){
+			push(@F2, $facet->[$j]);
+			next;
+		}
+	}
+	#min is the minimal face whose linear span contains (1, ..., 1)
+	my $min = union(union(\@maybeapex, \@F2), \@E);
+	#for each vertex that might be an apex, checks if it is an apex of min 
+	for my $V (@maybeapex){
+		my $Vw = 0;
+		for my $i (0..($dim)){
+			if ($diagram->[$V]->[$i] != 1){
+				next;
+			}
+			my $sum = 0;
+			for my $vert (@{$min}){
+				$sum += $diagram->[$vert]->[$i];
+			}
+			if ($sum == 1){
+				$Vw += 1;
+			}
+		}
+		if ($Vw == 1){
+			return 0;
+		}
+		if ($Vw == 0){
+			push(@F1, $V);
+		}
+		else{
+			push(@AF, $V);
+		}
+	}
+	return [\@F1, \@F2, \@AF, \@E];
+
+}
+
+#usage: lookForMF2s($diagram)
+#diagram should be reduced
+#loops over all facets, returns an AoA with all maximal full partitions with 
+#|V_w| \ge 2 for all w
+#that have non-empty A_F
+sub lookForMF2s{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my @facets = @{$subdiv->FACETS};
+	my @MF2s = ();
+	for my $f (@facets){
+		my @f = @{$f};
+		my $FP = fullPartitionFromFacet($diagram, \@f);
+		if ($FP == 0){
+			next;
+		}
+		push(@MF2s, maximizeFullPartition($subdiv, $FP->[0], $FP->[1], $FP->[2], $FP->[3]));
+	}
+	return \@MF2s;
+}
+
+#usage: degreeOfFace($diagram, [facet of link])
+#returns the absolute value of determinant of the [A_F, vertices in facet]
+#should be an MF2 
+#returns a rational number 
+#diagram must be reduced
+sub degreeOfFace{
+	my $diagram = shift;
+	my $facet = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my @matrixAoa = ();
+	for my $i (0..($dim/2) - 1){
+		my @vec = (0) x ($dim);
+		$vec[2*$i] = 1;
+		$vec[2*$i + 1] = 1;	
+		push(@matrixAoa, \@vec);
+	}
+	for my $v (@{$facet}){
+		push(@matrixAoa, $diagram->[$v]);
+	}
+	my $mat = new Matrix<Rational>(\@matrixAoa);
+	#print $mat;
+	my $det = abs(common::det($mat));
+	my $inverse = new Rational(1/$det);
+	return $inverse;
+}
+
+#usage: degreeOfFaceWithMultiplicity($diagram, $subdiv, [face of link with multiplicity])
+#converts the face into a sum of facets (with no multiplicity)
+#Does this by trying all simplifications using e_i - e_{i + 1}
+#may fail to return anything
+#returns -144169 if it can't simplify 
+sub degreeOfFaceWithMultiplicity{
+	my $diagram = shift;
+	my $dim = scalar(@{$diagram->[0]});
+	my $subdiv = shift;
+	my $linkdim = $dim/2;
+	my $facewithmult = shift;
+	my @sortedoriginal = sort {$a <=> $b} @{$facewithmult};
+	#finds a list of duplicates 
+	my @multiplicity = (0) x scalar(@{$diagram});
+	for my $v (@sortedoriginal){
+		$multiplicity[$v]++;
+	}
+	my @bigmult = ();
+	my @onemult = ();
+	for my $v (0..scalar(@{$diagram}) - 1){
+		if ($multiplicity[$v] > 1){
+			push(@bigmult, $v);
+		}
+		elsif ($multiplicity[$v] == 1){
+			push(@onemult, $v);
+		}
+	}
+	if (scalar(@bigmult) == 0){
+		#checks if it is actually a face
+		my @facet = (0..($dim/2 - 1));
+		for my $v (@sortedoriginal){
+			push(@facet, $v);
+		}
+		my @sortedface  = sort {$a <=> $b} @facet;
+		if (isFace($subdiv, \@sortedface)){
+			return degreeOfFace($diagram, $facewithmult);
+		}
+		else{
+			return 0;
+		}
+
+	}
+
+	#finds all ways to simplify 
+	my @swapstotry;
+	for my $v (@bigmult){
+		my @swaps = ();
+		for my $i (0..($dim/2 - 1)){
+			if ($diagram->[$v]->[2*$i] == 0 and $diagram->[$v]->[2*$i + 1] != 0){
+				push(@swaps, $i);
+			}
+			if ($diagram->[$v]->[2*$i] != 0 and $diagram->[$v]->[2*$i + 1] == 0){
+				push(@swaps, $i);
+			}
+		}
+		push(@swapstotry, \@swaps);
+
+	}
+	#generates a list of possible subsets to try for each vertex with multiplicity 
+	my @possiblesubsets;
+	for my $v (0..scalar(@bigmult) - 1){
+		if (scalar(@{$swapstotry[$v]}) < $multiplicity[$bigmult[$v]] - 1){
+			#print "Not enough directions to do swaps \n";
+			return -144169;
+		}
+		my @subs = subsets($swapstotry[$v], ($multiplicity[$bigmult[$v]] - 1));
+		$possiblesubsets[$v] = \@subs;
+		
+	}
+
+	#tries to simplify them in all possible ways
+	my $pairsofswaps = cartesian_product(@swapstotry);
+	for my $configuration (@{$pairsofswaps}){
+		#creates an AoAoA, first array is a vertex (counted with multiplicity)
+		#second array is a list of all of the vertices with non-zero coefficients
+		#third arrays is [vertex, coefficient] 
+		my @verticesAppearing = ();
+		for my $v (@onemult){
+			push(@verticesAppearing, [[$v, 1]]);
+		}
+		for my $v (0..(scalar(@bigmult) - 1)){
+			push(@verticesAppearing, [[$bigmult[$v], 1]]);
+			for my $swap ($configuration->[$v]){
+				my $vcoeff = new Rational($diagram->[$bigmult[$v]]->[2*$swap] - $diagram->[$bigmult[$v]]->[2*$swap + 1]);
+				my @verticescoeffs = ();
+				for my $w (0..(scalar(@{$diagram}) - 1)){
+					if ($bigmult[$v] == $w){
+						next;
+					}
+					my $coef = new Rational($diagram->[$w]->[2*$swap + 1] - $diagram->[$w]->[2*$swap]);
+					if ($coef != 0){
+						push(@verticescoeffs, [$w, $coef/$vcoeff]);
+					}
+				}
+				push(@verticesAppearing, \@verticescoeffs);
+			}
+		}
+		#tests if the configurations works 
+		my @allfaces = @{cartesian_product(@verticesAppearing)};
+		my @nonzerofaces;
+		my $validswaps = 1;
+		for my $f (@allfaces){
+			#face should be 0 if it has multiplicty if this swap set works
+			my @facet = (0..($dim/2 - 1));
+			for my $v (@{$f}){
+				push(@facet, $v->[0]);
+			}
+			my @sortedface  = sort {$a <=> $b} @facet;
+			my @nodupes = @{uniqueElements(\@sortedface)};
+			#pArr(\@nodupes);
+			if (scalar(@nodupes) == $dim){
+				if (isFace($subdiv, \@nodupes)){
+					push(@nonzerofaces, $f);
+				}
+			}
+			else{
+				if (isFace($subdiv, \@nodupes)){
+					$validswaps = 0;
+					last;
+				}
+			}
+		}
+		if ($validswaps == 1){
+			#pArr($configuration);
+			#pArrArr($nonzerofaces[1]);
+			my $degree = 0;
+			for my $f (@nonzerofaces){
+				my @faceverts = ();
+				my $coeff = 1;
+				for my $v (@{$f}){
+					push(@faceverts, $v->[0]);
+					$coeff = $coeff*($v->[1]);
+				}
+				$degree += $coeff*degreeOfFace($diagram, \@faceverts);
+			}
+			return $degree;
+		}
+	}
+	#print "No valid swaps found \n";
+	return -144169;
+
+}
+
+#usage: computeDegreeMF2($diagram)
+#diagram should be an MF2 with E = F_1 = F_2 = \emptyset 
+#A_F should be the first several vertices 
+#for now, only tries to simplifying using e_{2i} on P_i
+sub computeDegreeMF2{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my $halfdim = scalar(@{$diagram->[0]})/2;
+	my @verticesAppearing;
+	for my $i (0..($halfdim - 1)){
+		my @icoeff;
+		for my $v (0..scalar(@{$diagram}) - 1){
+			if ($v == $i){
+				next;
+			}
+			my $coef = new Rational($diagram->[$v]->[2*$i]);
+			if ($coef == 0){
+				next;
+			}
+			push(@icoeff, [$v, -$coef]);
+			
+		}
+		push(@verticesAppearing, \@icoeff);
+	}
+	my @allfaces = @{cartesian_product(@verticesAppearing)};
+	my $degree = 0;
+	for my $f (@allfaces){
+		my @facet;
+		my $factor = 1;
+		for my $pair (@{$f}){
+			push(@facet, $pair->[0]);
+			$factor = $factor*$pair->[1];
+		}
+		#print "Found a facet with multiplicity";
+		pArr(\@facet);
+		my $degface = degreeOfFaceWithMultiplicity($diagram, $subdiv, \@facet);
+		#print $degface;
+		#print "\n";
+		#print $factor;
+		#print "\n";
+		if ($degface == -144169){
+			return -144169;
+		}
+		$degree += $factor*$degface;
+		#print "Partial sum is $degree \n";
+	}
+	if (powMinusOne($halfdim)*$degree <= 0){
+		print "Found counterexample \n";
+	}
+	return $degree;
+}
+
+#usage: computeDegreeAllWays($diagram)
+#diagram should be an MF2 with E = F_1 = F_2 = \emptyset 
+#A_F should be the first several vertices 
+#tries to compute the degree of a face in all possible ways 
+#i.e., trying all possible combinations of e_{2i} and e_{2i + 1}
+sub computeDegreeAllWays{
+	my $diagram = shift;
+	my $subdiv = diagramToSubdiv($diagram);
+	my $halfdim = scalar(@{$diagram->[0]})/2;
+	my @directions;
+	for my $i (0..($halfdim - 1)){
+		push(@directions, [2*$i, 2*$i + 1]);
+	}
+	my @possiblesimps = @{cartesian_product(@directions)};
+	for my $config (@possiblesimps){
+		my $working = 1;
+		my @verticesAppearing;
+		for my $i (0..($halfdim - 1)){
+			my @icoeff;
+			for my $v (0..scalar(@{$diagram}) - 1){
+				if ($v == $i){
+					next;
+				}
+				my $coef = new Rational($diagram->[$v]->[$config->[$i]]);
+				if ($coef == 0){
+					next;
+				}
+				push(@icoeff, [$v, -$coef]);
+			
+			}
+			push(@verticesAppearing, \@icoeff);
+		}
+		my @allfaces = @{cartesian_product(@verticesAppearing)};
+		my $degree = 0;
+		for my $f (@allfaces){
+			my @facet;
+			my $factor = 1;
+			for my $pair (@{$f}){
+				push(@facet, $pair->[0]);
+				$factor = $factor*$pair->[1];
+			}
+			my $degface = degreeOfFaceWithMultiplicity($diagram, $subdiv, \@facet);
+			if ($degface == -144169){
+				$working = 0;
+				last;
+			}
+			$degree += $factor*$degface;
+		}
+		if ($working == 1){
+			if (powMinusOne($halfdim)*$degree <= 0){
+				print "Found counterexample \n";
+			}
+			#print "degree is $degree \n";
+			if ($degree != -1){
+				print "Found example \n";
+			}
+			return $degree;
+		}
+	}
+	print "Unable to compute degree \n";
+}
+
+#usage: generateMF2($dim/2)
+#generates subdivisions with MF2s with E = F_1 = F_2 = emptyset 
+#in dimension 2*$dim 
+#A_F is the first $dim/2 points
+#does not return a reduced diagram, or check if it is actually an MF2 
+sub generateMF2{
+	my $halfdim = shift;
+	my $dim = $halfdim*2;
+	my $cbound = 5000;
+	my $sum = 35;
+	my $num = 20;
+	my @output = ();
+	#adds the points of A_F
+	for my $i (0..$halfdim - 1){
+		my @vec = (0) x ($dim);
+		$vec[2*$i] = 1;
+		$vec[2*$i + 1] = 1;
+		push(@output, \@vec);
+	}
+	#adds points to force convenience
+	for my $i (0..$dim - 1){
+		my @vec = (0) x ($dim);
+		addToIndex(\@vec, $i, int(rand($cbound - 1) + 1));
+		push(@output, \@vec);
+	}
+	#adds other point
+	for my $i (0..$num - 1){
+		my $total = int(rand($sum));
+		my @rand = ();
+		for my $j (0..$dim - 1){
+			push(@rand, int(rand($total + 1)));
+		}
+		if (sumArray(\@rand) == 0){
+			next;
+		}
+		my @sorted = sort {$a <=> $b} @rand;
+		my @result = ($sorted[0]);
+		for my $j (1..$dim - 2){
+			push(@result, $sorted[$j] - $sorted[$j - 1]);
+		}
+		push(@result, $total - $sorted[$dim - 2]);
+		push(@output, \@result);
+	}
+
+	#removes points that have the same projection
+	#keeps a random point
+	my @final = ();
+	my @proj = map(hProjection($_, 1), @output);
+	my %hash;
+	for my $i (0.. scalar(@proj) - 1){
+		my $str = "@{$proj[$i]}";
+		if (not $hash{$str}){
+			$hash{$str} = 1;
+			push(@final, $output[$i]);
+		}
+	}
 
 
+	return \@final;
 
+}
 
+#usage: generateManyMF2s($halfdim, $num)
+#makes $num potential MF2s, check if they are MF2s
+#returns reduced diagrams 
+#only returns simplicial 
 
+sub generateManyMF2s{
+	my $halfdim = shift;
+	my $num = shift;
+	my @diagrams = ();
+	for my $i (0..$num){
+		my $diagram = generateMF2($halfdim);
+		my $subdiv = diagramToSubdiv($diagram);
+		if ($subdiv == 1){
+			next;
+		}
+		$diagram = removeRedundant($diagram, $subdiv);
+		$subdiv = diagramToSubdiv($diagram);
+		my $trialcoord = $subdiv->COORDINATES->[$halfdim - 1];
+		#checks if it is an MF2 
+		#print $trialcoord;
+		#print "\n";
+		if ((2*($trialcoord->[2*$halfdim - 2]) == 1) and (2*($trialcoord->[2*$halfdim - 1]) == 1)){
+			#checks if it is maximal
+			my $maxful = maximizeFullPartition($subdiv, [], [], [0..($halfdim - 1)], []);
+			if ($maxful->[0] == $halfdim){
+				push(@diagrams, $diagram);
+			}
 
+		}
+	}
+	return \@diagrams;
 
-
-
+}
 
 
 

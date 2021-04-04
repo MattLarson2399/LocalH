@@ -304,7 +304,7 @@ sub coneToFace{
 
 #usage: localZetaFunction($diagram)
 #computes the topological local zeta function
-#for now only works for simplicial, because otherwise I need to do something more intelligent 
+#works for simplicial or non-simplicial
 #to compute the dim of a face
 #diagram must be reduced
 sub localZetaFunction{
@@ -843,6 +843,9 @@ sub checkOperativeFakeConjecture{
 		}
 	}
 	for my $c (@cands){
+		if ($c == -1){
+			next;
+		}
 		if (isPole($localzeta, $c)){
 			if (subdivHasOperative($diagram, $tri, $c)){
 				print "Found counterexample \n \n \n";

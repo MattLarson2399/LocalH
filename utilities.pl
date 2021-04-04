@@ -255,7 +255,7 @@ sub is_subset{
 	}
 }
 
-#usage: is_subset( list,  list)
+#usage: is_subset_unsorted( list,  list)
 #checks if the second list is a subset of the first
 #returns 1 if it is in the sublists
 #returns 0 if it is not
@@ -329,6 +329,19 @@ sub dotProduct{
 	return $answer;
 }
 
-
+#usage: uniqueElements(sorted array)
+#takes a sorted array of numbers 
+#returns the unique elements in array, i.e., removes the duplicates 
+#array must be sorted!
+sub uniqueElements{
+	my $array = shift;
+	my @unique = ($array->[0]);
+	for my $i (1..scalar(@{$array}) - 1){
+		if ($array->[$i] > $array->[$i - 1]){
+			push(@unique, $array->[$i]);
+		}
+	}
+	return \@unique
+}
 
 
